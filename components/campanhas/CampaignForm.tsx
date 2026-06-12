@@ -35,10 +35,25 @@ type ContactMode = "list" | "manual"
 type DispatchMode = "now" | "scheduled"
 type AbEntry = { id: string; weight: number }
 
+type InitialData = {
+  name: string
+  vendedorId: string
+  listId: string | null
+  templateId: string | null
+  templates: AbEntry[] | null
+  customMessage: string | null
+  minDelay: number
+  maxDelay: number
+  scheduleRules: ScheduleRule[]
+}
+
 type Props = {
   vendedores: Vendedor[]
   lists: ContactList[]
   templates: Template[]
+  /** When provided the form operates in edit mode (PUT instead of POST) */
+  campaignId?: string
+  initialData?: InitialData
 }
 
 function Select({
@@ -125,19 +140,30 @@ function clearDraft(): void {
   try { localStorage.removeItem(CAMPAIGN_DRAFT_KEY) } catch {}
 }
 
-export function CampaignForm({ vendedores, lists, templates }: Props) {
+export function CampaignForm({ vendedores, lists, templates, campaignId, initialData }: Props) {
   const router = useRouter()
+  const isEdit = !!campaignId
 
-  const [name, setName] = useState("")
-  const [vendedorId, setVendedorId] = useState("")
+  // Resolve initial A/B templates from initialData
+  const initAbTemplates = (): AbEntry[] => {
+    if (!initialData) return []
+    if (initialData.templates?.length) return initialData.templates
+    if (initialData.templateId) return [{ id: initialData.templateId, weight: 100 }]
+    return []
+  }
+
+  const [name, setName] = useState(() => initialData?.name ?? "")
+  const [vendedorId, setVendedorId] = useState(() => initialData?.vendedorId ?? "")
   const [contactMode, setContactMode] = useState<ContactMode>("list")
-  const [listId, setListId] = useState("")
+  const [listId, setListId] = useState(() => initialData?.listId ?? "")
   const [manualNumbers, setManualNumbers] = useState("")
   // A/B scripts: each entry is a script + its % weight
-  const [abTemplates, setAbTemplates] = useState<AbEntry[]>([])
-  const [customMessage, setCustomMessage] = useState("")
-  const [delay, setDelay] = useState<[number, number]>([15, 45])
-  const [rules, setRules] = useState<ScheduleRule[]>([])
+  const [abTemplates, setAbTemplates] = useState<AbEntry[]>(initAbTemplates)
+  const [customMessage, setCustomMessage] = useState(() => initialData?.customMessage ?? "")
+  const [delay, setDelay] = useState<[number, number]>(() =>
+    initialData ? [initialData.minDelay, initialData.maxDelay] : [15, 45]
+  )
+  const [rules, setRules] = useState<ScheduleRule[]>(() => initialData?.scheduleRules ?? [])
   const [dispatchMode, setDispatchMode] = useState<DispatchMode>("now")
   const [schedDate, setSchedDate] = useState("")
   const [schedTime, setSchedTime] = useState("")
@@ -146,8 +172,9 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
   const [draftRestored, setDraftRestored] = useState(false)
   const loadedRef = useRef(false)
 
-  // Load draft on mount; autosave on every subsequent change
+  // Load draft on mount; autosave on every subsequent change (skipped in edit mode)
   useEffect(() => {
+    if (isEdit) return // edit mode uses initialData, not localStorage draft
     if (!loadedRef.current) {
       loadedRef.current = true
       const d = readDraft()
@@ -223,7 +250,7 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
     setError("")
     if (!name.trim()) { setError("Informe o nome da campanha."); return }
     if (!vendedorId) { setError("Selecione um vendedor."); return }
-    if (contactMode === "manual" && manualCount === 0) {
+    if (!isEdit && contactMode === "manual" && manualCount === 0) {
       setError("Insira pelo menos um número válido.")
       return
     }
@@ -243,6 +270,58 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
     setSubmitting(mode)
     try {
       const validTemplates = abTemplates.filter((e) => e.id)
+
+      // ── Edit mode: PUT existing campaign ──────────────────────────────────
+      if (isEdit) {
+        const putRes = await fetch(`/api/campaigns/${campaignId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullEdit: true,
+            name: name.trim(),
+            vendedorId,
+            listId: listId || null,
+            templates: validTemplates.length > 0 ? validTemplates : undefined,
+            customMessage: validTemplates.length === 0 && customMessage.trim() ? customMessage.trim() : undefined,
+            minDelay: delay[0],
+            maxDelay: delay[1],
+            scheduleRules: flattenRules(rules),
+          }),
+        })
+        const putData: { ok?: boolean; error?: string } = await putRes.json()
+        if (!putRes.ok) { setError(putData.error ?? "Erro ao salvar campanha."); return }
+
+        if (mode === "start") {
+          const actionRes = await fetch(`/api/campaigns/${campaignId}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "START" }),
+          })
+          if (!actionRes.ok) {
+            const d = await actionRes.json() as { error?: string }
+            setError(d.error ?? "Erro ao iniciar campanha.")
+            return
+          }
+          router.push(`/campanhas/${campaignId}`)
+        } else if (mode === "schedule") {
+          const actionRes = await fetch(`/api/campaigns/${campaignId}/action`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "SCHEDULE", scheduledAt: scheduledAt!.toISOString() }),
+          })
+          if (!actionRes.ok) {
+            const d = await actionRes.json() as { error?: string }
+            setError(d.error ?? "Erro ao agendar campanha.")
+            return
+          }
+          router.push("/campanhas")
+        } else {
+          router.push("/campanhas")
+        }
+        return
+      }
+
+      // ── Create mode: POST new campaign ────────────────────────────────────
       const body: Record<string, unknown> = {
         name: name.trim(),
         vendedorId,
@@ -286,7 +365,9 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
         >
           <ArrowLeft className="w-4 h-4" />
         </button>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">Nova Campanha</h1>
+        <h1 className="text-xl font-semibold text-slate-900 dark:text-white">
+          {isEdit ? "Editar Campanha" : "Nova Campanha"}
+        </h1>
       </div>
 
       {/* Draft restored banner */}
@@ -357,32 +438,34 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
           {/* Contact source: tabs */}
           <div className="space-y-3">
             <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Contatos Alvo</label>
-            <div className="flex rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] p-1 gap-1">
-              <button
-                type="button"
-                onClick={() => setContactMode("list")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                  contactMode === "list"
-                    ? "bg-violet-600 text-white shadow-md"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                <FolderOpen className="w-3.5 h-3.5" />
-                Selecionar Lista
-              </button>
-              <button
-                type="button"
-                onClick={() => setContactMode("manual")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                  contactMode === "manual"
-                    ? "bg-violet-600 text-white shadow-md"
-                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                }`}
-              >
-                <PenLine className="w-3.5 h-3.5" />
-                Digitar Números
-              </button>
-            </div>
+            {!isEdit && (
+              <div className="flex rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] p-1 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setContactMode("list")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                    contactMode === "list"
+                      ? "bg-violet-600 text-white shadow-md"
+                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  }`}
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />
+                  Selecionar Lista
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setContactMode("manual")}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                    contactMode === "manual"
+                      ? "bg-violet-600 text-white shadow-md"
+                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                  }`}
+                >
+                  <PenLine className="w-3.5 h-3.5" />
+                  Digitar Números
+                </button>
+              </div>
+            )}
 
             <AnimatePresence mode="wait">
               {contactMode === "list" ? (
@@ -679,14 +762,15 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
 
       {/* Submit */}
       <div className="flex gap-3 pb-8">
-        {contactMode === "list" && (
+        {/* Rascunho / Salvar — shown when not scheduling */}
+        {(contactMode === "list" || isEdit) && (
           <button
             onClick={() => submit("draft")}
             disabled={!!submitting || !weightValid || hasEmptyScript}
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20 transition-colors disabled:opacity-50"
           >
             {submitting === "draft" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            Salvar como Rascunho
+            {isEdit ? "Salvar Rascunho" : "Salvar como Rascunho"}
           </button>
         )}
 
@@ -698,7 +782,7 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-violet-900/30"
           >
             {submitting === "start" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            Criar e Iniciar Agora
+            {isEdit ? "Salvar e Iniciar" : "Criar e Iniciar Agora"}
           </motion.button>
         ) : (
           <motion.button
@@ -708,7 +792,7 @@ export function CampaignForm({ vendedores, lists, templates }: Props) {
             className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-amber-900/20"
           >
             {submitting === "schedule" ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarClock className="w-4 h-4" />}
-            Agendar
+            {isEdit ? "Salvar e Agendar" : "Agendar"}
           </motion.button>
         )}
       </div>

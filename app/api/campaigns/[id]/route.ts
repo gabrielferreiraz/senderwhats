@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 export async function GET(
@@ -114,7 +115,78 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const { name, minDelay, maxDelay } = await req.json()
+  const body = await req.json() as {
+    fullEdit?: boolean
+    name?: string
+    vendedorId?: string
+    listId?: string | null
+    templates?: { id: string; weight: number }[]
+    customMessage?: string
+    minDelay?: number
+    maxDelay?: number
+    scheduleRules?: {
+      dayOfWeek: number
+      startTime: string
+      endTime: string
+      maxContacts: number | null
+      maxContactsPeriod?: string
+    }[]
+  }
+
+  // ── Full edit (from edit page, DRAFT campaigns only) ───────────────────────
+  if (body.fullEdit) {
+    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, scheduleRules } = body
+
+    if (!name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
+    if (!vendedorId)   return NextResponse.json({ error: "Vendedor é obrigatório" }, { status: 400 })
+    if ((minDelay ?? 0) > (maxDelay ?? 0)) {
+      return NextResponse.json({ error: "Delay mínimo não pode ser maior que o máximo" }, { status: 400 })
+    }
+
+    const campaign = await prisma.campaign.findUnique({ where: { id }, select: { status: true } })
+    if (!campaign) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    if (campaign.status !== "DRAFT") {
+      return NextResponse.json({ error: "Só rascunhos podem ser editados" }, { status: 409 })
+    }
+
+    const abTemplates = templates?.length ?? 0
+    const campaignTemplateId = abTemplates === 1 ? templates![0]!.id : null
+    const campaignTemplatesJson = abTemplates > 1 ? (templates as object) : Prisma.JsonNull
+
+    await prisma.$transaction(async (tx) => {
+      await tx.campaign.update({
+        where: { id },
+        data: {
+          name: name!.trim(),
+          vendedorId: vendedorId!,
+          listId: listId || null,
+          templateId: campaignTemplateId,
+          templates: campaignTemplatesJson,
+          customMessage: customMessage?.trim() || null,
+          minDelay: minDelay ?? 10,
+          maxDelay: maxDelay ?? 30,
+        },
+      })
+      await tx.campaignScheduleRule.deleteMany({ where: { campaignId: id } })
+      if (scheduleRules?.length) {
+        await tx.campaignScheduleRule.createMany({
+          data: scheduleRules.map((r) => ({
+            campaignId: id,
+            dayOfWeek: r.dayOfWeek,
+            startTime: r.startTime,
+            endTime: r.endTime,
+            maxContacts: r.maxContacts ?? null,
+            maxContactsPeriod: r.maxContactsPeriod,
+          })),
+        })
+      }
+    })
+
+    return NextResponse.json({ ok: true })
+  }
+
+  // ── Inline edit (name / delays from CampaignDetail) ───────────────────────
+  const { name, minDelay, maxDelay } = body
 
   if (minDelay !== undefined && maxDelay !== undefined && minDelay > maxDelay) {
     return NextResponse.json({ error: "Delay mínimo não pode ser maior que o máximo" }, { status: 400 })

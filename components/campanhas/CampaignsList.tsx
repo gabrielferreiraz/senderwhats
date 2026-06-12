@@ -13,6 +13,7 @@ import {
   Users,
   ExternalLink,
   CalendarClock,
+  Copy,
 } from "lucide-react"
 
 type CampaignStatus = "DRAFT" | "SCHEDULED" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED"
@@ -62,7 +63,20 @@ export function CampaignsList({ initial }: Props) {
   const router = useRouter()
   const [campaigns, setCampaigns] = useState<Campaign[]>(initial)
   const [actioning, setActioning] = useState<string | null>(null)
+  const [duplicating, setDuplicating] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  const handleDuplicate = async (id: string) => {
+    setDuplicating(id)
+    try {
+      const res = await fetch(`/api/campaigns/${id}/duplicate`, { method: "POST" })
+      if (!res.ok) return
+      const { id: newId } = await res.json() as { id: string }
+      router.push(`/campanhas/${newId}/editar`)
+    } finally {
+      setDuplicating(null)
+    }
+  }
 
   const callAction = async (id: string, action: "START" | "PAUSE" | "RESUME") => {
     setActioning(id)
@@ -252,6 +266,16 @@ export function CampaignsList({ initial }: Props) {
                         Pausar
                       </button>
                     )}
+
+                    {/* Duplicate */}
+                    <button
+                      onClick={() => handleDuplicate(c.id)}
+                      disabled={duplicating === c.id}
+                      title="Duplicar campanha"
+                      className="p-1.5 rounded-lg text-slate-400 dark:text-slate-600 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </button>
 
                     {/* Delete */}
                     <AnimatePresence mode="wait">

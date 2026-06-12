@@ -7,7 +7,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const { action } = await req.json() as { action: "START" | "PAUSE" | "RESUME" }
+  const { action, scheduledAt: scheduledAtRaw } = await req.json() as {
+    action: "START" | "PAUSE" | "RESUME" | "SCHEDULE"
+    scheduledAt?: string
+  }
 
   if (action === "PAUSE") {
     const campaign = await prisma.campaign.findUnique({ where: { id }, select: { status: true } })
@@ -93,6 +96,67 @@ export async function POST(
     ])
 
     return NextResponse.json({ ok: true, queued: items.length })
+  }
+
+  if (action === "SCHEDULE") {
+    const scheduled = scheduledAtRaw ? new Date(scheduledAtRaw) : null
+    if (!scheduled || isNaN(scheduled.getTime()) || scheduled <= new Date()) {
+      return NextResponse.json({ error: "Data de agendamento deve ser uma data futura válida" }, { status: 400 })
+    }
+
+    const campaign = await prisma.campaign.findUnique({
+      where: { id },
+      select: { status: true, listId: true, templateId: true, templates: true },
+    })
+    if (!campaign) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    if (!["DRAFT", "PAUSED"].includes(campaign.status)) {
+      return NextResponse.json({ error: "Só rascunhos e campanhas pausadas podem ser agendados" }, { status: 409 })
+    }
+
+    const existing = await prisma.campaignMessage.count({ where: { campaignId: id } })
+
+    if (existing > 0) {
+      await prisma.$transaction([
+        prisma.campaign.update({ where: { id }, data: { status: "SCHEDULED", scheduledAt: scheduled } }),
+        prisma.campaignMessage.updateMany({
+          where: { campaignId: id, status: "PENDING" },
+          data: { nextSendAt: scheduled },
+        }),
+      ])
+    } else if (campaign.listId) {
+      const abTemplates: AbTemplate[] = (() => {
+        if (Array.isArray(campaign.templates) && campaign.templates.length > 0) {
+          return campaign.templates as AbTemplate[]
+        }
+        if (campaign.templateId) return [{ id: campaign.templateId, weight: 100 }]
+        return []
+      })()
+
+      const items = await prisma.contactListItem.findMany({
+        where: { listId: campaign.listId },
+        select: { contactId: true },
+      })
+      const assignments = assignTemplateIds(items.length, abTemplates)
+
+      await prisma.$transaction([
+        prisma.campaign.update({ where: { id }, data: { status: "SCHEDULED", scheduledAt: scheduled } }),
+        prisma.campaignMessage.createMany({
+          data: items.map(({ contactId }, i) => ({
+            campaignId: id,
+            contactId,
+            currentStep: 1,
+            status: "PENDING",
+            nextSendAt: scheduled,
+            templateId: assignments[i] ?? null,
+          })),
+          skipDuplicates: true,
+        }),
+      ])
+    } else {
+      await prisma.campaign.update({ where: { id }, data: { status: "SCHEDULED", scheduledAt: scheduled } })
+    }
+
+    return NextResponse.json({ ok: true, status: "SCHEDULED" })
   }
 
   return NextResponse.json({ error: "Ação inválida" }, { status: 400 })

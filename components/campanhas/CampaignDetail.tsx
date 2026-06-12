@@ -20,6 +20,7 @@ import {
   Zap,
   WifiOff,
   AlertTriangle,
+  Copy,
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -627,6 +628,19 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const router = useRouter()
   const [data, setData] = useState<CampaignData>(initial)
   const [actioning, setActioning] = useState(false)
+  const [duplicating, setDuplicating] = useState(false)
+
+  const handleDuplicate = async () => {
+    setDuplicating(true)
+    try {
+      const res = await fetch(`/api/campaigns/${initial.id}/duplicate`, { method: "POST" })
+      if (!res.ok) return
+      const { id: newId } = await res.json() as { id: string }
+      router.push(`/campanhas/${newId}/editar`)
+    } finally {
+      setDuplicating(false)
+    }
+  }
   const [lastRefresh, setLastRefresh] = useState(Date.now())
   const [instanceState, setInstanceState] = useState<"open" | "close" | "connecting" | "unknown">("unknown")
   const [activeTab, setActiveTab] = useState<Tab>("queue")
@@ -747,6 +761,16 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
             title="Atualizar agora"
           >
             <RefreshCw className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={handleDuplicate}
+            disabled={duplicating}
+            title="Duplicar campanha"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-500 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-50"
+          >
+            {duplicating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+            Duplicar
           </button>
 
           {(isDraft || isPaused) && (
