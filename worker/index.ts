@@ -20,32 +20,31 @@ import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
-// Brazil abolished DST in April 2019 — Brasília is permanently UTC-3.
-// We use direct arithmetic (Date.now() - 3h) instead of Intl.DateTimeFormat
-// to avoid any ICU/tzdata issues on the server's Alpine container.
+// Business timezone: Mato Grosso do Sul (UTC-4), permanently — no DST.
+// Direct arithmetic avoids any ICU/tzdata issues on the Alpine container.
 
-/** Shift UTC timestamp to Brasília (UTC-3) keeping it as a plain Date. */
-function brt(): Date {
-  return new Date(Date.now() - 3 * 60 * 60 * 1000)
+const UTC_OFFSET_H = 4 // hours behind UTC
+
+/** Shift UTC timestamp to local time, returned as a plain Date for getUTC* calls. */
+function localNow(): Date {
+  return new Date(Date.now() - UTC_OFFSET_H * 60 * 60 * 1000)
 }
 
-/** Current day-of-week (0=Sun … 6=Sat) and "HH:MM" in Brasília time. */
+/** Current day-of-week (0=Sun … 6=Sat) and "HH:MM" in local time. */
 function brasiliaDateParts(): { day: number; hhmm: string } {
-  const d = brt()
+  const d = localNow()
   const hh = String(d.getUTCHours()).padStart(2, "0")
   const mm = String(d.getUTCMinutes()).padStart(2, "0")
   return { day: d.getUTCDay(), hhmm: `${hh}:${mm}` }
 }
 
 /**
- * UTC Date that equals the start of today (00:00:00) in Brasília.
- * Brasília midnight = UTC 03:00, so we anchor on that.
+ * UTC Date that equals the start of today (00:00:00) in local time.
+ * Local midnight = UTC 04:00 (for UTC-4).
  */
 function brasiliaStartOfDay(): Date {
-  const d = brt()
-  // Use UTC fields of the shifted date to get the Brasília calendar date,
-  // then add 3 h back to express midnight BRT as a UTC instant.
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 3, 0, 0))
+  const d = localNow()
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), UTC_OFFSET_H, 0, 0))
 }
 
 /**
@@ -361,7 +360,7 @@ async function tick(): Promise<void> {
 
   // Compute Brasília time ONCE per tick — all window checks share it.
   const { day, hhmm } = brasiliaDateParts()
-  log("🕐", `Tick — Brasília: ${hhmm}, dia ${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][day] ?? day}`)
+  log("🕐", `Tick — Local: ${hhmm}, dia ${["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"][day] ?? day}`)
 
   try {
     // ── 1. Activate SCHEDULED campaigns whose time has come ───────────────────
@@ -587,7 +586,7 @@ async function tick(): Promise<void> {
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
 function log(emoji: string, msg: string): void {
-  const d = brt()
+  const d = localNow()
   const hh = String(d.getUTCHours()).padStart(2, "0")
   const mm = String(d.getUTCMinutes()).padStart(2, "0")
   const ss = String(d.getUTCSeconds()).padStart(2, "0")
@@ -602,7 +601,7 @@ console.log("║   SenderWhats Worker  •  iniciando...      ║")
 console.log("╚════════════════════════════════════════════╝")
 console.log(`Banco: ${process.env.DATABASE_URL?.split("@")[1] ?? "?"}`)
 console.log(`WhatsApp API: ${WHATSAPP_BASE}`)
-console.log(`Horário Brasília: ${bootTime}`)
+console.log(`Horário Local: ${bootTime}`)
 console.log("Tick: a cada 10 segundos\n")
 
 tick()
