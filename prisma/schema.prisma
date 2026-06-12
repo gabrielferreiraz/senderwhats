@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Cada vendedor tem seu WhatsApp conectado e seus próprios contatos/campanhas
+model Vendedor {
+  id        String       @id @default(cuid())
+  nome      String
+  userId    String       @unique
+  ativo     Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  listas    ContactList[]
+  campanhas Campaign[]
+}
+
+model Contact {
+  id        String            @id @default(cuid())
+  phone     String            @unique
+  name      String?
+  tags      String[]
+  variables Json?             // Campos extras do CSV: {email, saldo, vencimento, ...}
+  createdAt DateTime          @default(now())
+  listItems ContactListItem[]
+  messages  CampaignMessage[]
+}
+
+model ContactList {
+  id          String            @id @default(cuid())
+  name        String
+  description String?
+  vendedorId  String?           // Lista pertence a um vendedor específico
+  createdAt   DateTime          @default(now())
+  vendedor    Vendedor?         @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
+  items       ContactListItem[]
+  campaigns   Campaign[]
+}
+
+model ContactListItem {
+  id        String      @id @default(cuid())
+  contactId String
+  listId    String
+  contact   Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  list      ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, listId])
+}
+
+// Script = sequência de passos de mensagem
+model MessageTemplate {
+  id        String          @id @default(cuid())
+  name      String
+  createdAt DateTime        @default(now())
+  steps     TemplateStep[]
+  campaigns Campaign[]
+  messages  CampaignMessage[]
+}
+
+model TemplateStep {
+  id         String          @id @default(cuid())
+  templateId String
+  stepOrder  Int
+  body       String          // Suporta {nome}, {variavel}, spintax {[Olá|Oi|Bom dia]}
+  delayAfter Int             @default(60)  // Segundos até o próximo passo
+  template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId, stepOrder])
+}
+
+model Campaign {
+  id            String                 @id @default(cuid())
+  name          String
+  vendedorId    String                 // Vendedor responsável por esta campanha
+  listId        String?
+  templateId    String?
+  templates     Json?                  // A/B testing: [{ id: string, weight: number }]
+  customMessage String?                // Mensagem direta (quando não há script)
+  scheduledAt   DateTime?              // Se definido, campanha inicia automaticamente nessa data/hora
+  status        CampaignStatus         @default(DRAFT)
+  minDelay      Int                    @default(10)  // segundos
+  maxDelay      Int                    @default(30)  // segundos
+  createdAt     DateTime               @default(now())
+  vendedor      Vendedor               @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  list          ContactList?           @relation(fields: [listId], references: [id], onDelete: SetNull)
+  template      MessageTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  messages      CampaignMessage[]
+  scheduleRules CampaignScheduleRule[]
+
+  @@index([status, scheduledAt])
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+}
+
+// Janelas de envio: ex. Seg-Sex das 09:00 às 18:00, máx 100 contatos
+model CampaignScheduleRule {
+  id                String   @id @default(cuid())
+  campaignId        String
+  dayOfWeek         Int      // 0=Dom, 1=Seg, ..., 6=Sáb
+  startTime         String   // "09:00"
+  endTime           String   // "18:00"
+  maxContacts       Int?     // null = sem limite
+  maxContactsPeriod String   @default("day")  // "hour" | "day" | "week"
+  campaign          Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+}
+
+// Fila de execução: um item por contato, controla o passo atual da sequência
+model CampaignMessage {
+  id            String        @id @default(cuid())
+  campaignId    String
+  contactId     String
+  currentStep   Int           @default(1)
+  status        MessageStatus @default(PENDING)
+  nextSendAt    DateTime?     // Worker processa quando nextSendAt <= agora
+  templateId    String?
+  whatsappMsgId String?
+  sentAt        DateTime?
+  failureReason    String?
+  failureCategory  String?    // "no_whatsapp" | "session_error" | "timeout" | "unknown"
+  createdAt        DateTime   @default(now())
+  campaign      Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  contact       Contact       @relation(fields: [contactId], references: [id])
+  template      MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+
+  @@index([status, nextSendAt])
+  @@index([campaignId, status])
+}
+
+enum MessageStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  COMPLETED
+  SKIPPED
+}
