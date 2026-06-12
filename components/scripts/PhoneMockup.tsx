@@ -6,7 +6,9 @@ import { Check } from "lucide-react"
 
 type Step = {
   id: string
+  stepType: "text" | "image"
   body: string
+  imageUrl: string | null
   delayAfterSeconds: number
 }
 
@@ -197,9 +199,35 @@ export function PhoneMockup({ steps }: Props) {
                               opacity: isEmpty ? 0.4 : 1,
                             }}
                           />
-                          <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap break-words">
-                            <MessageText text={processed} />
-                          </p>
+                          {step.stepType === "image" ? (
+                            <div>
+                              {step.imageUrl ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img
+                                  src={step.imageUrl}
+                                  alt="imagem"
+                                  className="w-full rounded-lg max-h-36 object-cover mb-1"
+                                />
+                              ) : (
+                                <div className="w-full h-24 rounded-lg bg-white/10 flex items-center justify-center mb-1">
+                                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-white/30">
+                                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                                    <polyline points="21 15 16 10 5 21"/>
+                                  </svg>
+                                </div>
+                              )}
+                              {step.body.trim() && (
+                                <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap break-words">
+                                  <MessageText text={applyPreview(step.body)} />
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap break-words">
+                              <MessageText text={processed} />
+                            </p>
+                          )}
                           <div className="flex items-center justify-end gap-0.5 mt-0.5">
                             <span className="text-[8px] text-white/40">{time}</span>
                             <Check

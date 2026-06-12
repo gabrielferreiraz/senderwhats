@@ -18,6 +18,8 @@ import cron from "node-cron"
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
+import { readFileSync } from "fs"
+import { join } from "path"
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
 // Business timezone: Mato Grosso do Sul (UTC-4), permanently — no DST.
@@ -134,22 +136,71 @@ async function sendText(userId: string, number: string, message: string): Promis
   }
 }
 
-/** Fetches all active+authenticated instances in a single HTTP call. Returns a Set of ready userIds. */
-async function fetchReadyInstances(): Promise<Set<string> | null> {
+const MIME_MAP: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  gif: "image/gif",
+  webp: "image/webp",
+}
+
+async function sendImage(
+  userId: string,
+  number: string,
+  imageUrl: string,
+  caption: string
+): Promise<void> {
+  const filePath = join(process.cwd(), "public", imageUrl)
+  const buffer = readFileSync(filePath)
+  const ext = (imageUrl.split(".").pop() ?? "jpg").toLowerCase()
+  const mimeType = MIME_MAP[ext] ?? "image/jpeg"
+
+  const form = new FormData()
+  form.append("number", number)
+  if (caption.trim()) form.append("caption", caption.trim())
+  form.append("image", new Blob([buffer], { type: mimeType }), `image.${ext}`)
+
+  const res = await fetch(`${WHATSAPP_BASE}/message/send-image/${userId}`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(70_000),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`WhatsApp API → ${res.status}: ${text}`)
+  }
+}
+
+type InstanceSnapshot = { ready: boolean; authenticated: boolean; state: string | null }
+
+/**
+ * Fetches all instances from the WhatsApp API in one call.
+ * Returns null when the API itself is unreachable (network error / 5xx) so the
+ * caller can skip the tick entirely rather than incorrectly pausing campaigns.
+ * Returns a Map (possibly empty) when the API responded — instances absent from
+ * the map or with ready=false are genuinely disconnected.
+ */
+async function fetchReadyInstances(): Promise<Map<string, InstanceSnapshot> | null> {
   try {
     const res = await fetch(`${WHATSAPP_BASE}/instance/active`)
     if (!res.ok) {
-      log("⚠️", `Falha ao buscar instâncias WhatsApp (${res.status})`)
+      log("⚠️", `Falha ao buscar instâncias WhatsApp (${res.status}) — tick ignorado`)
       return null
     }
-    const data = await res.json() as { instances: Array<{ userId: string; ready: boolean; authenticated: boolean }> }
-    const ready = new Set<string>()
-    for (const inst of data.instances) {
-      if (inst.ready && inst.authenticated) ready.add(inst.userId)
+    const data = await res.json() as {
+      instances: Array<{ userId: string; ready: boolean; authenticated: boolean; state?: string | null }>
     }
-    return ready
+    const map = new Map<string, InstanceSnapshot>()
+    for (const inst of data.instances) {
+      map.set(inst.userId, {
+        ready: inst.ready,
+        authenticated: inst.authenticated,
+        state: inst.state ?? null,
+      })
+    }
+    return map
   } catch (err) {
-    log("⚠️", `Erro ao buscar instâncias WhatsApp: ${errMsg(err)}`)
+    log("⚠️", `Erro ao buscar instâncias WhatsApp: ${errMsg(err)} — tick ignorado`)
     return null
   }
 }
@@ -298,6 +349,7 @@ async function processMessage(
   // Template-based: find current step
   const step = await prisma.templateStep.findFirst({
     where: { templateId, stepOrder: currentStep },
+    select: { body: true, delayAfter: true, stepType: true, imageUrl: true },
   })
 
   if (!step) {
@@ -305,12 +357,25 @@ async function processMessage(
     return
   }
 
-  const text = applyVariables(processSpintax(step.body), contact)
   const phone = normalizePhone(contact.phone)
+  const isImage = step.stepType === "image"
+
+  if (isImage && !step.imageUrl) {
+    log("⏩", `Passo ${currentStep} é imagem mas não tem arquivo — marcando como SKIPPED`)
+    await updateMsg(msgId, { status: "SKIPPED" })
+    return
+  }
 
   try {
-    await sendText(vendedorUserId, phone, text)
-    log("✅", `Passo ${currentStep} → ${phone} (${contact.name ?? "sem nome"})`)
+    if (isImage) {
+      const caption = applyVariables(processSpintax(step.body), contact)
+      await sendImage(vendedorUserId, phone, step.imageUrl!, caption)
+      log("🖼️", `Passo ${currentStep} (imagem) → ${phone} (${contact.name ?? "sem nome"})`)
+    } else {
+      const text = applyVariables(processSpintax(step.body), contact)
+      await sendText(vendedorUserId, phone, text)
+      log("✅", `Passo ${currentStep} → ${phone} (${contact.name ?? "sem nome"})`)
+    }
 
     const hasNextStep = await prisma.templateStep.count({
       where: { templateId, stepOrder: currentStep + 1 },
@@ -397,21 +462,31 @@ async function tick(): Promise<void> {
 
     if (!campaigns || campaigns.length === 0) return
 
-    // ── Fetch all ready WhatsApp instances once (O(1) vs O(N) HTTP calls) ────
-    const readyUserIds = await fetchReadyInstances()
-    if (readyUserIds === null) {
-      log("⚠️", "Não foi possível verificar instâncias WhatsApp — tick ignorado")
-      return
-    }
+    // ── Fetch all WhatsApp instance snapshots once per tick ──────────────────
+    const instanceSnapshots = await fetchReadyInstances()
+    if (instanceSnapshots === null) return // API unreachable — already logged
 
     for (const campaign of campaigns) {
       // Each campaign is wrapped independently: one campaign's DB error
       // must never prevent other campaigns from being processed.
       try {
         // ── WhatsApp instance health ─────────────────────────────────────────
+        // instanceSnapshots is non-null (null causes early return above).
+        // Absent from map OR ready=false both mean the instance is disconnected.
         const userId = campaign.vendedor.userId
-        if (!readyUserIds.has(userId)) {
-          log("📵", `Instância "${userId}" não pronta — "${campaign.name}" aguardando reconexão`)
+        const snap = instanceSnapshots.get(userId)
+        if (!snap || !snap.ready || !snap.authenticated) {
+          const reason = !snap
+            ? "não encontrada na lista de instâncias ativas"
+            : `state=${snap.state ?? "null"}, ready=${snap.ready}, authenticated=${snap.authenticated}`
+          log("📵", `Instância "${userId}" desconectada [${reason}] — pausando "${campaign.name}"`)
+          await prisma.campaign.update({
+            where: { id: campaign.id },
+            data: { status: "PAUSED" },
+          }).catch((err: unknown) => {
+            log("⚠️", `Erro ao pausar "${campaign.name}" por desconexão: ${errMsg(err)}`)
+          })
+          campaignFailStreak.delete(campaign.id)
           continue
         }
 

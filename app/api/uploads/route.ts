@@ -1,0 +1,47 @@
+import { NextRequest, NextResponse } from "next/server"
+import { writeFileSync, mkdirSync } from "fs"
+import { join } from "path"
+
+const UPLOAD_DIR = join(process.cwd(), "public", "uploads")
+const MAX_SIZE = 16 * 1024 * 1024 // 16 MB
+
+const ALLOWED: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/gif": "gif",
+  "image/webp": "webp",
+}
+
+export async function POST(req: NextRequest) {
+  let formData: FormData
+  try {
+    formData = await req.formData()
+  } catch {
+    return NextResponse.json({ error: "Requisição inválida (esperado multipart/form-data)" }, { status: 400 })
+  }
+
+  const file = formData.get("file")
+  if (!file || typeof file === "string") {
+    return NextResponse.json({ error: "Campo 'file' não encontrado" }, { status: 400 })
+  }
+
+  const ext = ALLOWED[file.type]
+  if (!ext) {
+    return NextResponse.json(
+      { error: "Formato não suportado. Use JPEG, PNG, GIF ou WebP." },
+      { status: 400 }
+    )
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  if (buffer.byteLength > MAX_SIZE) {
+    return NextResponse.json({ error: "Arquivo muito grande. Máximo 16 MB." }, { status: 400 })
+  }
+
+  const filename = `${crypto.randomUUID()}.${ext}`
+  mkdirSync(UPLOAD_DIR, { recursive: true })
+  writeFileSync(join(UPLOAD_DIR, filename), buffer)
+
+  return NextResponse.json({ url: `/uploads/${filename}` }, { status: 201 })
+}

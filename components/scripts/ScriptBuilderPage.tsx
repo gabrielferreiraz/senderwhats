@@ -22,6 +22,9 @@ import {
   Strikethrough,
   Code,
   List,
+  Type,
+  ImageIcon,
+  Upload,
 } from "lucide-react"
 import { PhoneMockup } from "./PhoneMockup"
 
@@ -29,14 +32,22 @@ import { PhoneMockup } from "./PhoneMockup"
 
 type StepState = {
   id: string
-  body: string
+  stepType: "text" | "image"
+  body: string           // text content (stepType=text) OR image caption (stepType=image)
+  imageUrl: string | null
   delayAfterSeconds: number
 }
 
 type TemplateInput = {
   id: string
   name: string
-  steps: { stepOrder: number; body: string; delayAfter: number }[]
+  steps: {
+    stepOrder: number
+    body: string
+    delayAfter: number
+    stepType?: string
+    imageUrl?: string | null
+  }[]
 }
 
 type ListVars = {
@@ -479,15 +490,18 @@ export function ScriptBuilderPage({ template }: Props) {
     template?.steps.length
       ? template.steps.map((s) => ({
           id: uid(),
+          stepType: (s.stepType === "image" ? "image" : "text") as "text" | "image",
           body: s.body,
+          imageUrl: s.imageUrl ?? null,
           delayAfterSeconds: s.delayAfter,
         }))
-      : [{ id: uid(), body: "", delayAfterSeconds: 30 }]
+      : [{ id: uid(), stepType: "text" as const, body: "", imageUrl: null, delayAfterSeconds: 30 }]
   )
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [focusedId, setFocusedId] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
+  const [uploadingStepId, setUploadingStepId] = useState<string | null>(null)
   const [listVars, setListVars] = useState<ListVars[]>([])
   const [varPickerStepId, setVarPickerStepId] = useState<string | null>(null)
   const [spintaxPickerStepId, setSpintaxPickerStepId] = useState<string | null>(null)
@@ -509,8 +523,25 @@ export function ScriptBuilderPage({ template }: Props) {
     setSavedAt(null)
   }, [])
 
+  const handleImageUpload = async (stepId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingStepId(stepId)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/uploads", { method: "POST", body: fd })
+      if (!res.ok) return
+      const { url } = await res.json() as { url: string }
+      updateStep(stepId, { imageUrl: url })
+    } finally {
+      setUploadingStepId(null)
+      e.target.value = ""
+    }
+  }
+
   const addStep = () => {
-    const newStep: StepState = { id: uid(), body: "", delayAfterSeconds: 30 }
+    const newStep: StepState = { id: uid(), stepType: "text", body: "", imageUrl: null, delayAfterSeconds: 30 }
     setSteps((prev) => [...prev, newStep])
     setSavedAt(null)
     setTimeout(() => {
@@ -587,7 +618,9 @@ export function ScriptBuilderPage({ template }: Props) {
     const payload = {
       name: name.trim(),
       steps: steps.map((s) => ({
+        stepType: s.stepType,
         body: s.body,
+        imageUrl: s.imageUrl ?? null,
         delayAfter: s.delayAfterSeconds,
       })),
     }
@@ -712,6 +745,163 @@ export function ScriptBuilderPage({ template }: Props) {
                     }`}
                   >
                     <div className="p-4 space-y-3">
+                      {/* Step type toggle */}
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-600 uppercase tracking-wider">
+                          Tipo:
+                        </span>
+                        {(["text", "image"] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() =>
+                              updateStep(step.id, {
+                                stepType: t,
+                                imageUrl: t === "text" ? null : step.imageUrl,
+                              })
+                            }
+                            className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
+                              step.stepType === t
+                                ? "bg-violet-100 dark:bg-violet-500/15 border-violet-400 dark:border-violet-500/40 text-violet-700 dark:text-violet-400"
+                                : "bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.07] text-slate-500 dark:text-slate-500 hover:border-slate-300 dark:hover:border-white/[0.12]"
+                            }`}
+                          >
+                            {t === "text" ? <Type className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
+                            {t === "text" ? "Texto" : "Imagem"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── Image step UI ─────────────────────────────────────────── */}
+                      {step.stepType === "image" && (
+                        <div className="space-y-2">
+                          {/* Upload zone or thumbnail */}
+                          {step.imageUrl ? (
+                            <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={step.imageUrl}
+                                alt="Imagem do passo"
+                                className="w-full max-h-48 object-cover"
+                              />
+                              <div className="absolute top-2 right-2 flex gap-1">
+                                <label
+                                  title="Trocar imagem"
+                                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-black/50 text-white hover:bg-black/70 cursor-pointer transition-colors"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  Trocar
+                                  <input
+                                    type="file"
+                                    accept="image/jpeg,image/png,image/gif,image/webp"
+                                    className="sr-only"
+                                    onChange={(e) => handleImageUpload(step.id, e)}
+                                  />
+                                </label>
+                                <button
+                                  onClick={() => updateStep(step.id, { imageUrl: null })}
+                                  title="Remover imagem"
+                                  className="flex items-center justify-center w-6 h-6 rounded-lg bg-black/50 text-white hover:bg-rose-600/80 transition-colors"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label
+                              className={`flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+                                uploadingStepId === step.id
+                                  ? "border-violet-400/50 bg-violet-50 dark:bg-violet-500/5"
+                                  : "border-slate-200 dark:border-white/[0.08] hover:border-violet-400/50 dark:hover:border-violet-500/30 hover:bg-violet-50/50 dark:hover:bg-violet-500/[0.04]"
+                              }`}
+                            >
+                              {uploadingStepId === step.id ? (
+                                <>
+                                  <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
+                                  <span className="text-xs text-violet-600 dark:text-violet-400">Enviando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <ImageIcon className="w-6 h-6 text-slate-400 dark:text-slate-600" />
+                                  <div className="text-center">
+                                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                                      Clique para adicionar imagem
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">
+                                      JPEG, PNG, GIF, WebP — máx. 16 MB
+                                    </p>
+                                  </div>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/jpeg,image/png,image/gif,image/webp"
+                                className="sr-only"
+                                onChange={(e) => handleImageUpload(step.id, e)}
+                                disabled={uploadingStepId !== null}
+                              />
+                            </label>
+                          )}
+
+                          {/* Caption row with variable chips */}
+                          <div className="space-y-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-600 uppercase tracking-wider">
+                                Legenda:
+                              </span>
+                              {QUICK_TAGS.map((tag) => (
+                                <button
+                                  key={tag.label}
+                                  onClick={() => insertAtCursor(step.id, tag.value)}
+                                  className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] hover:bg-violet-100 dark:hover:bg-violet-600/20 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors border border-slate-200 dark:border-white/[0.05]"
+                                >
+                                  {tag.label}
+                                </button>
+                              ))}
+                              <div className="relative">
+                                <button
+                                  onClick={() =>
+                                    setVarPickerStepId(isVarOpen ? null : step.id)
+                                  }
+                                  className={`flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-md border transition-colors ${
+                                    isVarOpen
+                                      ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                                      : "bg-slate-100 dark:bg-white/[0.05] border-slate-200 dark:border-white/[0.05] text-slate-500 dark:text-slate-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400"
+                                  }`}
+                                >
+                                  <Database className="w-3 h-3" />
+                                  Variáveis
+                                </button>
+                                <AnimatePresence>
+                                  {isVarOpen && (
+                                    <VarPicker
+                                      stepId={step.id}
+                                      listVars={listVars}
+                                      onInsert={(sid, key) => {
+                                        insertAtCursor(sid, `{${key}}`)
+                                        setVarPickerStepId(null)
+                                      }}
+                                      onClose={() => setVarPickerStepId(null)}
+                                    />
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                            <textarea
+                              ref={(el) => { textareaRefs.current[step.id] = el }}
+                              value={step.body}
+                              rows={2}
+                              onChange={(e) => updateStep(step.id, { body: e.target.value })}
+                              onFocus={() => setFocusedId(step.id)}
+                              onBlur={() => setFocusedId(null)}
+                              placeholder="Legenda da imagem (opcional)... Use {nome}, {variavel}"
+                              className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 resize-none focus:outline-none leading-relaxed border border-slate-200 dark:border-white/[0.07] rounded-lg px-3 py-2 max-h-24 overflow-y-auto"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Text step UI ───────────────────────────────────────────── */}
+                      {step.stepType === "text" && <>
                       {/* Quick insert row */}
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-600 uppercase tracking-wider mr-1">
@@ -940,6 +1130,8 @@ export function ScriptBuilderPage({ template }: Props) {
                           </div>
                         )
                       })()}
+
+                      </>}
 
                       {/* Footer: delay + delete */}
                       <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-white/[0.04]">

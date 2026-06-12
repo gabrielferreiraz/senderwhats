@@ -21,7 +21,7 @@ export async function PUT(
   const { id } = await params
   const { name, steps } = await req.json() as {
     name: string
-    steps: { body: string; delayAfter: number }[]
+    steps: { body: string; delayAfter: number; stepType?: string; imageUrl?: string | null }[]
   }
 
   await prisma.$transaction(async (tx) => {
@@ -32,7 +32,9 @@ export async function PUT(
         data: steps.map((s, i) => ({
           templateId: id,
           stepOrder: i + 1,
+          stepType: s.stepType === "image" ? "image" : "text",
           body: s.body,
+          imageUrl: s.stepType === "image" ? (s.imageUrl ?? null) : null,
           delayAfter: Math.max(0, Math.floor(Number(s.delayAfter) || 0)),
         })),
       })

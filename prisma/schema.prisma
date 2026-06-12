@@ -63,7 +63,9 @@ model TemplateStep {
   id         String          @id @default(cuid())
   templateId String
   stepOrder  Int
-  body       String          // Suporta {nome}, {variavel}, spintax {[Olá|Oi|Bom dia]}
+  stepType   String          @default("text") // "text" | "image"
+  body       String          // Text content (stepType=text) OR image caption (stepType=image)
+  imageUrl   String?         // Relative path e.g. "/uploads/xxx.jpg" — only for stepType=image
   delayAfter Int             @default(60)  // Segundos até o próximo passo
   template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 

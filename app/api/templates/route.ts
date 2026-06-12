@@ -12,7 +12,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { name, steps } = await req.json() as {
     name: string
-    steps: { body: string; delayAfter: number }[]
+    steps: { body: string; delayAfter: number; stepType?: string; imageUrl?: string | null }[]
   }
 
   if (!name?.trim()) {
@@ -26,7 +26,9 @@ export async function POST(req: NextRequest) {
         data: steps.map((s, i) => ({
           templateId: t.id,
           stepOrder: i + 1,
+          stepType: s.stepType === "image" ? "image" : "text",
           body: s.body,
+          imageUrl: s.stepType === "image" ? (s.imageUrl ?? null) : null,
           delayAfter: Math.max(0, Math.floor(Number(s.delayAfter) || 0)),
         })),
       })
