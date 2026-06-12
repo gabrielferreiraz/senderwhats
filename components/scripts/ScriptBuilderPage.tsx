@@ -266,20 +266,23 @@ function SpintaxPicker({
   onClose,
   initialOptions,
   replaceRange,
+  listVars = [],
 }: {
   stepId: string
   onInsert: (stepId: string, text: string, replaceRange?: { start: number; end: number }) => void
   onClose: () => void
   initialOptions?: string[]
   replaceRange?: { start: number; end: number }
+  listVars?: ListVars[]
 }) {
   const isEditing = !!initialOptions
   const [options, setOptions] = useState(initialOptions ?? ["", ""])
   const [previewIdx, setPreviewIdx] = useState(0)
+  const [focusedOptIdx, setFocusedOptIdx] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
-  const firstRef = useRef<HTMLTextAreaElement>(null)
+  const optionRefs = useRef<Array<HTMLTextAreaElement | null>>([])
 
-  useEffect(() => { firstRef.current?.focus() }, [])
+  useEffect(() => { optionRefs.current[0]?.focus() }, [])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -289,8 +292,47 @@ function SpintaxPicker({
     return () => document.removeEventListener("mousedown", handler)
   }, [onClose])
 
-  const validOptions = options.map(o => o.trim()).filter(Boolean)
+  // Clamp focused index when options shrink
+  useEffect(() => {
+    setFocusedOptIdx((prev) => Math.min(prev, options.length - 1))
+  }, [options.length])
+
+  const validOptions = options.map((o) => o.trim()).filter(Boolean)
   const canInsert = validOptions.length >= 2
+
+  // All variable chips shown inside the picker
+  const allVarChips = [
+    ...QUICK_TAGS,
+    ...listVars.flatMap((l) =>
+      l.variables.map((v) => ({ label: `{${v}}`, value: `{${v}}` }))
+    ),
+  ]
+
+  // Insert a variable at the cursor of the currently focused option textarea
+  const insertVarIntoOption = (variable: string) => {
+    const idx = Math.min(focusedOptIdx, options.length - 1)
+    const el = optionRefs.current[idx]
+    if (!el) {
+      setOptions((prev) => {
+        const next = [...prev]
+        next[idx] = (next[idx] ?? "") + variable
+        return next
+      })
+      return
+    }
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    const newVal = el.value.slice(0, start) + variable + el.value.slice(end)
+    setOptions((prev) => {
+      const next = [...prev]
+      next[idx] = newVal
+      return next
+    })
+    setTimeout(() => {
+      el.focus()
+      el.setSelectionRange(start + variable.length, start + variable.length)
+    }, 0)
+  }
 
   const handleInsert = () => {
     if (!canInsert) return
@@ -298,7 +340,7 @@ function SpintaxPicker({
     onClose()
   }
 
-  const cyclePreview = () => setPreviewIdx(i => (i + 1) % Math.max(1, validOptions.length))
+  const cyclePreview = () => setPreviewIdx((i) => (i + 1) % Math.max(1, validOptions.length))
 
   return (
     <motion.div
@@ -324,15 +366,42 @@ function SpintaxPicker({
         </p>
       </div>
 
+      {/* Variable chips — insert into the focused option */}
+      <div className="px-3 pt-2.5 pb-2 border-b border-slate-100 dark:border-white/5">
+        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-wider mb-1.5">
+          Inserir na opção {focusedOptIdx + 1}:
+        </p>
+        <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
+          {allVarChips.map((chip) => (
+            <button
+              key={chip.value}
+              onMouseDown={(e) => { e.preventDefault(); insertVarIntoOption(chip.value) }}
+              className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 hover:text-violet-600 dark:hover:text-violet-400 border border-slate-200 dark:border-white/[0.07] transition-colors"
+            >
+              {chip.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {/* Options */}
       <div className="p-3 space-y-2">
         {options.map((opt, i) => (
           <div key={i} className="flex items-start gap-2">
-            <span className="text-[10px] font-bold text-slate-400 w-4 text-center shrink-0 mt-2">{i + 1}</span>
+            <span
+              className={`text-[10px] font-bold w-4 text-center shrink-0 mt-2 transition-colors ${
+                focusedOptIdx === i
+                  ? "text-violet-500 dark:text-violet-400"
+                  : "text-slate-400"
+              }`}
+            >
+              {i + 1}
+            </span>
             <textarea
-              ref={i === 0 ? firstRef : undefined}
+              ref={(el) => { optionRefs.current[i] = el }}
               value={opt}
               rows={1}
+              onFocus={() => setFocusedOptIdx(i)}
               onChange={(e) => {
                 const next = [...options]
                 next[i] = e.target.value
@@ -342,7 +411,11 @@ function SpintaxPicker({
               }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleInsert() } }}
               placeholder={`Opção ${i + 1}...`}
-              className="flex-1 bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-400 dark:focus:border-violet-500/40 transition-all resize-none leading-relaxed overflow-hidden"
+              className={`flex-1 bg-slate-50 dark:bg-white/5 border rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition-all resize-none leading-relaxed overflow-hidden ${
+                focusedOptIdx === i
+                  ? "border-violet-400 dark:border-violet-500/50"
+                  : "border-slate-200 dark:border-white/10 focus:border-violet-400 dark:focus:border-violet-500/40"
+              }`}
             />
             {options.length > 2 && (
               <button
@@ -679,6 +752,7 @@ export function ScriptBuilderPage({ template }: Props) {
                             {isSpintaxOpen && (
                               <SpintaxPicker
                                 stepId={step.id}
+                                listVars={listVars}
                                 onInsert={(sid, text) => {
                                   insertAtCursor(sid, text)
                                   setSpintaxPickerStepId(null)
@@ -715,6 +789,7 @@ export function ScriptBuilderPage({ template }: Props) {
                                 {editingSpintax?.stepId === step.id && (
                                   <SpintaxPicker
                                     stepId={step.id}
+                                    listVars={listVars}
                                     initialOptions={editingSpintax.options}
                                     replaceRange={{ start: editingSpintax.start, end: editingSpintax.end }}
                                     onInsert={(sid, text, range) => {
