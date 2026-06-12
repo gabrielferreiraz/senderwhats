@@ -40,6 +40,11 @@ html.dark body {
   background: rgba(148, 163, 184, 0.45);
 }
 
+/* Safe area padding for iOS home indicator */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 /* Seleção de texto */
 ::selection {
   background: rgba(139, 92, 246, 0.25);

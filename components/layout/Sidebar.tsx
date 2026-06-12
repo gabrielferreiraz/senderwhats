@@ -30,7 +30,7 @@ export function Sidebar() {
   const onlineRatio = instances.total > 0 ? instances.online / instances.total : 0
 
   return (
-    <aside className="w-64 h-full flex flex-col shrink-0 bg-white/90 dark:bg-slate-900/50 backdrop-blur-md border-r border-slate-200 dark:border-white/5">
+    <aside className="hidden lg:flex w-64 h-full flex-col shrink-0 bg-white/90 dark:bg-slate-900/50 backdrop-blur-md border-r border-slate-200 dark:border-white/5">
       {/* Logo */}
       <div className="flex items-center gap-3 px-5 py-5 border-b border-slate-200 dark:border-white/5">
         <motion.div
