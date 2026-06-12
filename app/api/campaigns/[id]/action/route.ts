@@ -37,7 +37,16 @@ export async function POST(
     const existing = await prisma.campaignMessage.count({ where: { campaignId: id } })
 
     if (existing > 0) {
-      await prisma.campaign.update({ where: { id }, data: { status: "RUNNING" } })
+      // Campaign was SCHEDULED: messages have nextSendAt = scheduled time.
+      // Reset any future nextSendAt so the worker picks them up immediately.
+      const now = new Date()
+      await prisma.$transaction([
+        prisma.campaign.update({ where: { id }, data: { status: "RUNNING", scheduledAt: null } }),
+        prisma.campaignMessage.updateMany({
+          where: { campaignId: id, status: "PENDING", nextSendAt: { gt: now } },
+          data: { nextSendAt: now },
+        }),
+      ])
       return NextResponse.json({ ok: true, queued: existing })
     }
 
