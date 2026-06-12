@@ -20,44 +20,32 @@ import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
-// All schedule-window checks use Brasília time (America/Sao_Paulo).
-// Brazil abolished DST in April 2019, so the offset is permanently UTC-3.
+// Brazil abolished DST in April 2019 — Brasília is permanently UTC-3.
+// We use direct arithmetic (Date.now() - 3h) instead of Intl.DateTimeFormat
+// to avoid any ICU/tzdata issues on the server's Alpine container.
 
-const TZ = "America/Sao_Paulo"
+/** Shift UTC timestamp to Brasília (UTC-3) keeping it as a plain Date. */
+function brt(): Date {
+  return new Date(Date.now() - 3 * 60 * 60 * 1000)
+}
 
 /** Current day-of-week (0=Sun … 6=Sat) and "HH:MM" in Brasília time. */
 function brasiliaDateParts(): { day: number; hhmm: string } {
-  const now = new Date()
-
-  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-  const weekdayStr = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    weekday: "short",
-  }).format(now)
-  const day = Math.max(0, WEEKDAYS.indexOf(weekdayStr))
-
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(now)
-
-  let hour   = parts.find((p) => p.type === "hour")?.value   ?? "00"
-  const minute = parts.find((p) => p.type === "minute")?.value ?? "00"
-  if (hour === "24") hour = "00" // Intl quirk at midnight
-
-  const hhmm = `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`
-  return { day, hhmm }
+  const d = brt()
+  const hh = String(d.getUTCHours()).padStart(2, "0")
+  const mm = String(d.getUTCMinutes()).padStart(2, "0")
+  return { day: d.getUTCDay(), hhmm: `${hh}:${mm}` }
 }
 
 /**
  * UTC Date that equals the start of today (00:00:00) in Brasília.
- * Since Brazil is permanently UTC-3, this is reliable without DST checks.
+ * Brasília midnight = UTC 03:00, so we anchor on that.
  */
 function brasiliaStartOfDay(): Date {
-  const dateStr = new Date().toLocaleDateString("en-CA", { timeZone: TZ }) // "YYYY-MM-DD"
-  return new Date(`${dateStr}T00:00:00-03:00`)
+  const d = brt()
+  // Use UTC fields of the shifted date to get the Brasília calendar date,
+  // then add 3 h back to express midnight BRT as a UTC instant.
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 3, 0, 0))
 }
 
 /**
@@ -599,13 +587,11 @@ async function tick(): Promise<void> {
 // ─── Logger ───────────────────────────────────────────────────────────────────
 
 function log(emoji: string, msg: string): void {
-  const ts = new Date().toLocaleTimeString("pt-BR", {
-    timeZone: TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  })
-  console.log(`[${ts}] ${emoji}  ${msg}`)
+  const d = brt()
+  const hh = String(d.getUTCHours()).padStart(2, "0")
+  const mm = String(d.getUTCMinutes()).padStart(2, "0")
+  const ss = String(d.getUTCSeconds()).padStart(2, "0")
+  console.log(`[${hh}:${mm}:${ss}] ${emoji}  ${msg}`)
 }
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
