@@ -93,6 +93,17 @@ export async function POST(req: NextRequest) {
         ? [{ id: body.templateId, weight: 100 }]
         : []
 
+  // Validate A/B weights
+  if (abTemplates.length > 1) {
+    const weightSum = abTemplates.reduce((s, t) => s + t.weight, 0)
+    if (weightSum !== 100) {
+      return NextResponse.json(
+        { error: `A soma dos pesos dos scripts A/B deve ser exatamente 100% (soma atual: ${weightSum}%).` },
+        { status: 400 }
+      )
+    }
+  }
+
   // How to store on the Campaign row:
   // - 1 template  → store templateId (simple mode, no JSON overhead)
   // - 2+ templates → store templates JSON, templateId = null

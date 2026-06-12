@@ -73,6 +73,16 @@ export async function POST(
       return []
     })()
 
+    if (abTemplates.length > 1) {
+      const weightSum = abTemplates.reduce((s, t) => s + t.weight, 0)
+      if (weightSum !== 100) {
+        return NextResponse.json(
+          { error: `A soma dos pesos dos scripts A/B deve ser 100% (soma atual: ${weightSum}%). Edite a campanha e corrija os pesos.` },
+          { status: 400 }
+        )
+      }
+    }
+
     const items = await prisma.contactListItem.findMany({
       where: { listId: campaign.listId },
       select: { contactId: true },
@@ -131,6 +141,16 @@ export async function POST(
         if (campaign.templateId) return [{ id: campaign.templateId, weight: 100 }]
         return []
       })()
+
+      if (abTemplates.length > 1) {
+        const weightSum = abTemplates.reduce((s, t) => s + t.weight, 0)
+        if (weightSum !== 100) {
+          return NextResponse.json(
+            { error: `A soma dos pesos dos scripts A/B deve ser 100% (soma atual: ${weightSum}%). Edite a campanha e corrija os pesos.` },
+            { status: 400 }
+          )
+        }
+      }
 
       const items = await prisma.contactListItem.findMany({
         where: { listId: campaign.listId },
