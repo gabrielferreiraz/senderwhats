@@ -1,9 +1,14 @@
 const BASE_URL = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
+const API_KEY = process.env.API_KEY ?? ""
+
+function authHeader(): Record<string, string> {
+  return API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init?.headers },
+    headers: { "Content-Type": "application/json", ...authHeader(), ...init?.headers },
   })
   if (!res.ok) {
     const text = await res.text()

@@ -38,7 +38,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   )
 }
 
-export function VolumeChart({ data }: { data: DayData[] }) {
+export function VolumeChart({ data, subtitle = "Últimos 7 dias" }: { data: DayData[]; subtitle?: string }) {
   const hasData = data.some((d) => d.enviadas > 0 || d.falhas > 0)
 
   return (
@@ -46,7 +46,7 @@ export function VolumeChart({ data }: { data: DayData[] }) {
       <div className="flex items-center justify-between mb-5">
         <div>
           <p className="text-sm font-semibold text-slate-900 dark:text-white">Volume de Disparos</p>
-          <p className="text-xs text-slate-500 mt-0.5">Últimos 7 dias</p>
+          <p className="text-xs text-slate-500 mt-0.5">{subtitle}</p>
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
           <span className="flex items-center gap-1.5">

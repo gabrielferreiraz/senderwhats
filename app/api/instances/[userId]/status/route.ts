@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
 const BASE = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
+const API_KEY = process.env.API_KEY ?? ""
+const authHeaders = (): Record<string, string> =>
+  API_KEY ? { Authorization: `Bearer ${API_KEY}` } : {}
 
 export type ConnState = "open" | "close" | "connecting"
 
@@ -22,7 +25,7 @@ export async function GET(
   const { userId } = await params
 
   try {
-    const res = await fetch(`${BASE}/instance/status/${userId}`)
+    const res = await fetch(`${BASE}/instance/status/${userId}`, { headers: authHeaders() })
 
     // 404 = session not found (plain text body — do not call .json())
     if (res.status === 404) {

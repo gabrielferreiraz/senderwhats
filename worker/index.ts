@@ -123,7 +123,7 @@ function applyVariables(template: string, contact: ContactLike): string {
 }
 
 const WHATSAPP_BASE = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
-const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY ?? ""
+const WHATSAPP_API_KEY = process.env.API_KEY ?? ""
 
 function authHeader(): Record<string, string> {
   return WHATSAPP_API_KEY ? { Authorization: `Bearer ${WHATSAPP_API_KEY}` } : {}

@@ -110,7 +110,9 @@ export function Sidebar() {
 
           <p className="text-sm font-bold text-slate-900 dark:text-white mb-2">
             {mounted ? instances.online : "—"}
-            <span className="text-slate-400 dark:text-slate-500 font-normal"> / {mounted ? instances.total : "—"} ativas</span>
+            <span className="text-slate-400 dark:text-slate-500 font-normal text-xs"> online</span>
+            <span className="text-slate-300 dark:text-slate-600 font-normal mx-1">·</span>
+            <span className="text-slate-400 dark:text-slate-500 font-normal text-xs">{mounted ? instances.total : "—"} cadastradas</span>
           </p>
 
           {/* Progress bar */}

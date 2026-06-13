@@ -2,7 +2,19 @@
 
 import { useState, useTransition } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Send, Megaphone, Users, TrendingUp, ChevronDown, Trophy, Loader2 } from "lucide-react"
+import {
+  Send,
+  Megaphone,
+  Users,
+  TrendingUp,
+  ChevronDown,
+  Trophy,
+  Loader2,
+  UserPlus,
+  MessageCircle,
+  Repeat2,
+  Clock,
+} from "lucide-react"
 import { StatsCard } from "./StatsCard"
 import { VolumeChart } from "./VolumeChart"
 import { FunnelMetrics } from "./FunnelMetrics"
@@ -10,14 +22,17 @@ import { FunnelMetrics } from "./FunnelMetrics"
 type DayData = { day: string; enviadas: number; falhas: number }
 type FunnelData = { enviadas: number; falhas: number; pendentes: number; taxaSucesso: number }
 type VendorRank = { id: string; nome: string; userId: string; sent: number; failed: number; taxaSucesso: number }
+type RemarketingStats = { totalLeads: number; replied: number; pending: number; taxaResposta: number }
+
 type DashData = {
-  sentToday: number
-  failedToday: number
+  sentInRange: number
+  failedInRange: number
   activeCampaigns: number
   totalContacts: number
   chartData: DayData[]
   funnel: FunnelData
   vendorRanking: VendorRank[]
+  remarketing: RemarketingStats
 }
 
 type Vendedor = { id: string; nome: string; userId: string }
@@ -27,17 +42,33 @@ type Props = {
   vendedores: Vendedor[]
 }
 
+type DateRange = "today" | "7d" | "30d"
+
+const RANGE_LABELS: Record<DateRange, string> = { today: "Hoje", "7d": "7 dias", "30d": "30 dias" }
+const SENT_LABEL: Record<DateRange, string> = {
+  today: "Enviadas Hoje",
+  "7d": "Enviadas (7 dias)",
+  "30d": "Enviadas (30 dias)",
+}
+const CHART_SUBTITLE: Record<DateRange, string> = {
+  today: "Hoje",
+  "7d": "Últimos 7 dias",
+  "30d": "Últimos 30 dias",
+}
+
 export function DashboardClient({ initial, vendedores }: Props) {
   const [data, setData] = useState<DashData>(initial)
   const [selectedVendorId, setSelectedVendorId] = useState<string>("")
+  const [dateRange, setDateRange] = useState<DateRange>("7d")
   const [isPending, startTransition] = useTransition()
 
-  const handleVendorChange = (vendorId: string) => {
-    setSelectedVendorId(vendorId)
+  function fetchData(vendorId: string, range: DateRange) {
     startTransition(async () => {
-      const url = vendorId ? `/api/dashboard?vendedorId=${vendorId}` : "/api/dashboard"
+      const params = new URLSearchParams()
+      if (vendorId) params.set("vendedorId", vendorId)
+      params.set("range", range)
       try {
-        const res = await fetch(url, { cache: "no-store" })
+        const res = await fetch(`/api/dashboard?${params}`, { cache: "no-store" })
         if (res.ok) setData(await res.json())
       } catch {
         // keep current data on error
@@ -45,54 +76,87 @@ export function DashboardClient({ initial, vendedores }: Props) {
     })
   }
 
+  const handleVendorChange = (vendorId: string) => {
+    setSelectedVendorId(vendorId)
+    fetchData(vendorId, dateRange)
+  }
+
+  const handleRangeChange = (range: DateRange) => {
+    setDateRange(range)
+    fetchData(selectedVendorId, range)
+  }
+
   const selectedVendor = vendedores.find((v) => v.id === selectedVendorId)
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      {/* Vendor selector */}
-      <div className="flex items-center justify-between">
+      {/* Header: title + date filter + vendor selector */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Dashboard</h1>
           <p className="text-xs text-slate-500 mt-0.5">
             {selectedVendor ? `Exibindo dados de ${selectedVendor.nome}` : "Todos os vendedores"}
           </p>
         </div>
-        <div className="relative">
-          {isPending && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2">
-              <Loader2 className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 animate-spin" />
-            </div>
-          )}
-          <select
-            value={selectedVendorId}
-            onChange={(e) => handleVendorChange(e.target.value)}
-            className={`appearance-none bg-white dark:bg-white/[0.05] border border-slate-300 dark:border-white/10 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all pr-8 py-2.5 ${isPending ? "pl-9" : "pl-4"}`}
-          >
-            <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">Todos os Vendedores</option>
-            {vendedores.map((v) => (
-              <option key={v.id} value={v.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                {v.nome}
-              </option>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date range pills */}
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-white/[0.05] rounded-xl p-1 border border-slate-200 dark:border-white/10">
+            {(["today", "7d", "30d"] as DateRange[]).map((range) => (
+              <button
+                key={range}
+                onClick={() => handleRangeChange(range)}
+                className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-all ${
+                  dateRange === range
+                    ? "bg-white dark:bg-white/10 text-slate-900 dark:text-white shadow-sm"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
+                }`}
+              >
+                {RANGE_LABELS[range]}
+              </button>
             ))}
-          </select>
-          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500 pointer-events-none" />
+          </div>
+
+          {/* Vendor selector */}
+          <div className="relative">
+            {isPending && (
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                <Loader2 className="w-3.5 h-3.5 text-violet-500 dark:text-violet-400 animate-spin" />
+              </div>
+            )}
+            <select
+              value={selectedVendorId}
+              onChange={(e) => handleVendorChange(e.target.value)}
+              className={`appearance-none bg-white dark:bg-white/[0.05] border border-slate-300 dark:border-white/10 rounded-xl text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all pr-8 py-2.5 ${isPending ? "pl-9" : "pl-4"}`}
+            >
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                Todos os Vendedores
+              </option>
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                  {v.nome}
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 dark:text-slate-500 pointer-events-none" />
+          </div>
         </div>
       </div>
 
       {/* KPI Cards */}
       <motion.div
-        key={selectedVendorId || "all"}
+        key={`${selectedVendorId}-${dateRange}`}
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.2 }}
         className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4"
       >
         <StatsCard
-          label="Enviadas Hoje"
-          value={data.sentToday.toLocaleString("pt-BR")}
+          label={SENT_LABEL[dateRange]}
+          value={data.sentInRange.toLocaleString("pt-BR")}
           Icon={Send}
           iconColor="violet"
-          sub={data.failedToday > 0 ? `${data.failedToday} falha(s) hoje` : "Sem falhas hoje"}
+          sub={data.failedInRange > 0 ? `${data.failedInRange} falha(s) no período` : "Sem falhas no período"}
         />
         <StatsCard
           label="Campanhas Ativas"
@@ -120,9 +184,46 @@ export function DashboardClient({ initial, vendedores }: Props) {
       {/* Charts row */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <div className="xl:col-span-2">
-          <VolumeChart data={data.chartData} />
+          <VolumeChart data={data.chartData} subtitle={CHART_SUBTITLE[dateRange]} />
         </div>
         <FunnelMetrics data={data.funnel} />
+      </div>
+
+      {/* Remarketing section */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-600 mb-3">
+          Remarketing
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          <StatsCard
+            label="Leads Enfileirados"
+            value={data.remarketing.totalLeads.toLocaleString("pt-BR")}
+            Icon={UserPlus}
+            iconColor="indigo"
+            sub="Criados no período"
+          />
+          <StatsCard
+            label="Responderam"
+            value={data.remarketing.replied.toLocaleString("pt-BR")}
+            Icon={MessageCircle}
+            iconColor="emerald"
+            sub="Leads que responderam"
+          />
+          <StatsCard
+            label="Taxa de Resposta"
+            value={`${data.remarketing.taxaResposta}%`}
+            Icon={Repeat2}
+            iconColor="violet"
+            sub="Responderam / Total"
+          />
+          <StatsCard
+            label="Follow-ups Pendentes"
+            value={data.remarketing.pending.toLocaleString("pt-BR")}
+            Icon={Clock}
+            iconColor="rose"
+            sub="Aguardando próximo envio"
+          />
+        </div>
       </div>
 
       {/* Vendor ranking + Quick actions */}
@@ -206,9 +307,7 @@ export function DashboardClient({ initial, vendedores }: Props) {
               className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none p-5 flex flex-col items-center justify-center gap-2 text-center"
             >
               <Trophy className="w-6 h-6 text-slate-300 dark:text-slate-700" />
-              <p className="text-sm text-slate-400 dark:text-slate-600">
-                Nenhum disparo realizado ainda.
-              </p>
+              <p className="text-sm text-slate-400 dark:text-slate-600">Nenhum disparo realizado ainda.</p>
             </motion.div>
           )}
         </AnimatePresence>

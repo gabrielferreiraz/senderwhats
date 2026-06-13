@@ -1,35 +1,38 @@
 import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
+
+export const dynamic = "force-dynamic"
 
 type ActiveInstance = {
   userId: string
-  instanceId: string
   ready: boolean
-  authenticated: boolean
-  state: string | null
-  number: string | null
-  queueLength: number
 }
 
 type ActiveResponse = {
-  total: number
   instances: ActiveInstance[]
 }
 
 export async function GET() {
+  // Total always comes from DB — source of truth for registered vendedores
+  const total = await prisma.vendedor.count({ where: { ativo: true } })
+
+  // Online comes from WhatsApp API — only instances currently connected
+  let online = 0
   try {
     const url = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
+    const apiKey = process.env.API_KEY ?? ""
     const res = await fetch(`${url}/instance/active`, {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
     })
-    if (!res.ok) return NextResponse.json({ online: 0, total: 0 })
-
-    const data = (await res.json()) as ActiveResponse
-    const instances = data.instances ?? []
-    const online = instances.filter((i) => i.ready).length
-
-    return NextResponse.json({ online, total: instances.length })
+    if (res.ok) {
+      const data = (await res.json()) as ActiveResponse
+      online = (data.instances ?? []).filter((i) => i.ready).length
+    }
   } catch {
-    return NextResponse.json({ online: 0, total: 0 })
+    // WhatsApp API unreachable — show 0 online, total still correct from DB
   }
+
+  return NextResponse.json({ online, total })
 }
