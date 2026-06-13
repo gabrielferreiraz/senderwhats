@@ -24,6 +24,16 @@ function normalizePhone(raw: string): string {
 // Called by the WhatsApp API every time an instance receives an individual message.
 // Payload: { userId, instanceId, from, body, timestamp }
 export async function POST(req: NextRequest) {
+  // Verify shared secret so only our WhatsApp API can trigger this
+  const secret = process.env.WEBHOOK_SECRET
+  if (secret) {
+    const auth = req.headers.get("authorization") ?? ""
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : auth
+    if (token !== secret) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+  }
+
   try {
     const body = await req.json() as {
       userId?: string
