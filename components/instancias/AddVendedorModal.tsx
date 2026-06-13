@@ -107,12 +107,14 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
         countdownIntervalRef.current = setInterval(() => {
           setQrCountdown((c) => (c <= 1 ? QR_LIFETIME_S : c - 1))
         }, 1000)
+      } else if (data.error === "qr_not_available") {
+        // Puppeteer still initializing — retry silently after 8s (no error shown)
+        setQrError(null)
+        setTimeout(() => {
+          if (mountedRef.current) fetchQR(uid)
+        }, 8000)
       } else {
-        setQrError(
-          data.error === "qr_not_available"
-            ? "QR não disponível — a instância pode estar inicializando. Aguarde ou tente novamente."
-            : "Não foi possível gerar o QR Code."
-        )
+        setQrError("Não foi possível gerar o QR Code.")
       }
     } catch {
       if (mountedRef.current) setQrError("Falha de comunicação com o servidor WhatsApp.")

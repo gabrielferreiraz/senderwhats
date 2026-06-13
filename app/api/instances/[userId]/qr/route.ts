@@ -54,9 +54,9 @@ export async function GET(
   //    all in-memory sessions. The create call is safe to repeat (returns 400 if exists).
   await ensureInstanceCreated(userId)
 
-  // 3. Poll while Puppeteer initializes (typically 5–15s).
-  //    6 attempts × 2s = 12s max wait before returning error.
-  for (let attempt = 0; attempt < 6; attempt++) {
+  // 3. Poll while Puppeteer initializes (typically 5–25s).
+  //    15 attempts × 2s = 30s max wait before returning error.
+  for (let attempt = 0; attempt < 15; attempt++) {
     await sleep(2000)
     const qr = await tryFetchQR(userId)
     if (qr) return NextResponse.json({ base64: qr })
