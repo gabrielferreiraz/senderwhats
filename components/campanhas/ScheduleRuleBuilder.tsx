@@ -109,7 +109,7 @@ function RuleCard({
             type="time"
             value={rule.startTime}
             onChange={(e) => onChange({ startTime: e.target.value })}
-            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all [color-scheme:light] dark:[color-scheme:dark]"
+            className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all [color-scheme:light] dark:[color-scheme:dark]"
           />
         </div>
         <div className="space-y-1.5">
@@ -121,7 +121,7 @@ function RuleCard({
             className={`w-full bg-slate-50 dark:bg-white/5 border rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white focus:outline-none transition-all [color-scheme:light] dark:[color-scheme:dark] ${
               rule.endTime && rule.startTime && rule.endTime <= rule.startTime
                 ? "border-rose-400 dark:border-rose-500/60 focus:border-rose-500/80"
-                : "border-slate-300 dark:border-white/10 focus:border-violet-500/40"
+                : "border-slate-200 dark:border-white/[0.06] focus:border-violet-500/40"
             }`}
           />
           {rule.endTime && rule.startTime && rule.endTime <= rule.startTime && (
@@ -142,13 +142,13 @@ function RuleCard({
               onChange={(e) =>
                 onChange({ maxContacts: e.target.value ? parseInt(e.target.value) : null })
               }
-              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 focus:outline-none focus:border-violet-500/40 transition-all"
+              className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 focus:outline-none focus:border-violet-500/40 transition-all"
             />
             <select
               value={rule.maxContactsPeriod}
               onChange={(e) => onChange({ maxContactsPeriod: e.target.value as "hour" | "day" | "week" })}
               disabled={rule.maxContacts === null}
-              className="shrink-0 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all disabled:opacity-40"
+              className="shrink-0 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-2 py-2 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all disabled:opacity-40"
             >
               <option value="hour">/ hora</option>
               <option value="day">/ dia</option>

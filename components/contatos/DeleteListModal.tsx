@@ -44,7 +44,7 @@ export function DeleteListModal({ list, onConfirm, onClose, deleting }: Props) {
             transition={{ type: "spring", stiffness: 320, damping: 28, duration: 0.22 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
           >
-            <div className="pointer-events-auto w-full max-w-md bg-white dark:bg-[#0f1117] border border-slate-200 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+            <div className="pointer-events-auto w-full max-w-md bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-white/[0.06] rounded-xl shadow-xl overflow-hidden">
               {/* Danger accent stripe */}
               <div className="h-1 bg-gradient-to-r from-rose-600 via-rose-500 to-orange-500" />
 
@@ -117,7 +117,7 @@ export function DeleteListModal({ list, onConfirm, onClose, deleting }: Props) {
                   <button
                     onClick={() => !deleting && onClose()}
                     disabled={deleting}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20 transition-colors disabled:opacity-40"
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20 transition-colors disabled:opacity-40"
                   >
                     Cancelar
                   </button>

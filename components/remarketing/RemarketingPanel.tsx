@@ -193,10 +193,8 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
 
   if (vendedores.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-14 flex flex-col items-center gap-4 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-violet-50 dark:bg-violet-600/10 flex items-center justify-center">
-          <Repeat className="w-7 h-7 text-violet-500 dark:text-violet-400" />
-        </div>
+      <div className="rounded-xl border border-dashed border-slate-200 dark:border-white/[0.07] p-14 flex flex-col items-center gap-4 text-center">
+        <Repeat className="w-8 h-8 text-slate-300 dark:text-slate-700" />
         <p className="font-semibold text-slate-900 dark:text-white">Nenhuma instância cadastrada</p>
         <p className="text-sm text-slate-500">Crie uma instância em <strong>Instâncias</strong> para configurar o remarketing.</p>
       </div>
@@ -208,13 +206,13 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
       {/* Instance selector + status bar */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
         <div className="flex-1">
-          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-widest mb-1.5 block">
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400 mb-1.5 block">
             Instância
           </label>
           <select
             value={selectedUserId}
             onChange={(e) => setSelectedUserId(e.target.value)}
-            className="w-full sm:w-64 text-sm bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+            className="w-full sm:w-64 text-sm bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
           >
             {vendedores.map((v) => (
               <option key={v.userId} value={v.userId}>
@@ -245,7 +243,7 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
       </div>
 
       {/* Config panel */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] overflow-hidden">
+      <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
         {/* Header */}
         <button
           onClick={() => setConfigOpen((o) => !o)}
@@ -396,7 +394,7 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
                         <select
                           value={s.templateId}
                           onChange={(e) => updateScript(i, e.target.value)}
-                          className="flex-1 text-sm bg-white dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-500/30"
+                          className="flex-1 text-sm bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
                         >
                           <option value="">— Selecionar script —</option>
                           {templates.map((t) => (
@@ -430,11 +428,10 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
                     <p className="text-xs text-rose-500 dark:text-rose-400">{saveError}</p>
                   )}
                   <motion.button
-                    whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={saveConfig}
                     disabled={saving}
-                    className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors shadow-lg shadow-violet-900/30 disabled:opacity-60"
+                    className="flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-60"
                   >
                     {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
                     Salvar configuração
@@ -447,7 +444,7 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
       </div>
 
       {/* Leads table */}
-      <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] overflow-hidden">
+      <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
         <div className="px-5 py-4 flex items-center justify-between border-b border-slate-100 dark:border-white/5">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-violet-500" />

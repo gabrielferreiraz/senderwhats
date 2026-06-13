@@ -59,7 +59,7 @@ export function MobileNav() {
   }
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-white/[0.06]">
+    <nav className="fixed bottom-0 left-0 right-0 z-30 lg:hidden bg-white dark:bg-[#0b0f19] border-t border-slate-200 dark:border-white/[0.06]">
       <div className="flex items-end pb-safe">
         {/* Left items */}
         {LEFT.map((item) => (
@@ -70,7 +70,7 @@ export function MobileNav() {
         <div className="flex-1 flex flex-col items-center justify-center pb-2.5 pt-1">
           <Link
             href="/campanhas/nova"
-            className="w-13 h-13 -mt-5 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 flex items-center justify-center shadow-lg shadow-violet-900/40 transition-colors ring-4 ring-white dark:ring-slate-900"
+            className="w-13 h-13 -mt-5 rounded-full bg-violet-600 hover:bg-violet-500 active:bg-violet-700 flex items-center justify-center shadow-lg shadow-violet-900/30 transition-colors ring-4 ring-white dark:ring-[#0b0f19]"
             style={{ width: 52, height: 52 }}
           >
             <Plus className="w-6 h-6 text-white" strokeWidth={2.5} />

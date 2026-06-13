@@ -198,7 +198,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={step === "form" ? onClose : undefined}
-        className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 z-40"
       />
 
       <motion.div
@@ -209,10 +209,10 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
         transition={{ type: "spring", stiffness: 380, damping: 30 }}
         className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
       >
-        <div className="pointer-events-auto w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl overflow-hidden">
+        <div className="pointer-events-auto w-full max-w-md rounded-xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-white/[0.06] shadow-xl overflow-hidden">
 
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-white/5">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/[0.06]">
             <div className="flex items-center gap-2.5">
               <div className="w-7 h-7 rounded-lg bg-violet-100 dark:bg-violet-600/20 flex items-center justify-center">
                 <Smartphone className="w-3.5 h-3.5 text-violet-600 dark:text-violet-400" />
@@ -253,7 +253,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
                       placeholder="Ex: João Silva"
                       required
                       autoFocus
-                      className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 focus:bg-white dark:focus:bg-white/[0.07] transition-all"
+                      className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 focus:bg-white dark:focus:bg-white/[0.07] transition-all"
                     />
                   </div>
 
@@ -272,7 +272,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
                       }}
                       placeholder="joao_silva"
                       required
-                      className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 focus:bg-white dark:focus:bg-white/[0.07] transition-all"
+                      className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 focus:bg-white dark:focus:bg-white/[0.07] transition-all"
                     />
                     <p className="text-[10px] text-slate-400 dark:text-slate-600">
                       Apenas letras minúsculas, números e _ (usado internamente pela API)
@@ -293,7 +293,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
                     <button
                       type="button"
                       onClick={onClose}
-                      className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20 transition-colors"
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20 transition-colors"
                     >
                       Cancelar
                     </button>

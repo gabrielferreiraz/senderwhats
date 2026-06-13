@@ -14,39 +14,49 @@ type StatsCardProps = {
   sub?: string
 }
 
-const iconStyles = {
-  violet: "bg-violet-100 dark:bg-violet-600/15 text-violet-600 dark:text-violet-400",
-  emerald: "bg-emerald-100 dark:bg-emerald-600/15 text-emerald-600 dark:text-emerald-400",
-  indigo: "bg-indigo-100 dark:bg-indigo-600/15 text-indigo-600 dark:text-indigo-400",
-  rose: "bg-rose-100 dark:bg-rose-600/15 text-rose-600 dark:text-rose-400",
+const iconColors = {
+  violet: "text-violet-500 dark:text-violet-400",
+  emerald: "text-emerald-500 dark:text-emerald-400",
+  indigo: "text-indigo-500 dark:text-indigo-400",
+  rose: "text-rose-500 dark:text-rose-400",
+}
+
+const accentColors = {
+  violet: "bg-violet-500",
+  emerald: "bg-emerald-500",
+  indigo: "bg-indigo-500",
+  rose: "bg-rose-500",
 }
 
 export function StatsCard({ label, value, Icon, iconColor, trend, sub }: StatsCardProps) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none backdrop-blur-sm p-5 flex flex-col gap-4">
-      <div className="flex items-start justify-between">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconStyles[iconColor]}`}>
-          <Icon className="w-5 h-5" />
+    <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5 flex flex-col gap-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className={`w-1 h-4 rounded-full ${accentColors[iconColor]}`} />
+          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
         </div>
-        {trend && (
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-              trend.value >= 0
-                ? "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
-                : "bg-rose-100 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400"
-            }`}
-          >
-            {trend.value >= 0 ? "+" : ""}
-            {trend.value}% {trend.label}
-          </span>
-        )}
+        <Icon className={`w-4 h-4 ${iconColors[iconColor]}`} />
       </div>
 
       <div>
-        <p className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">{value}</p>
-        <p className="text-sm text-slate-500 mt-0.5">{label}</p>
-        {sub && <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">{sub}</p>}
+        <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight tabular-nums">{value}</p>
+        {sub && (
+          <p className="text-[11px] text-slate-400 dark:text-slate-600 mt-1">{sub}</p>
+        )}
       </div>
+
+      {trend && (
+        <span
+          className={`self-start text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${
+            trend.value >= 0
+              ? "bg-emerald-50 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+              : "bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-400"
+          }`}
+        >
+          {trend.value >= 0 ? "+" : ""}{trend.value}% {trend.label}
+        </span>
+      )}
     </div>
   )
 }

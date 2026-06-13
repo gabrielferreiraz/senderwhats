@@ -105,7 +105,7 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 8 }}
         transition={{ duration: 0.18 }}
-        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10"
+        className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto bg-white dark:bg-[#0b0f19] rounded-xl shadow-xl border border-slate-200 dark:border-white/[0.06]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-slate-100 dark:border-white/[0.06]">
@@ -155,7 +155,7 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
                         updated[idx] = { templateId: e.target.value }
                         setScripts(updated)
                       }}
-                      className="w-full appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl py-2.5 pl-9 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
+                      className="w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl py-2.5 pl-9 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
                     >
                       <option value="" className="bg-white dark:bg-slate-900 text-slate-400">
                         Selecione um script...
@@ -200,7 +200,7 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
                   step={60}
                   value={intervalMinutes}
                   onChange={(e) => setIntervalMinutes(Math.max(60, parseInt(e.target.value) || 1440))}
-                  className="w-24 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+                  className="w-24 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
                 />
                 <span className="text-xs text-slate-500">minutos</span>
                 <span className="text-[11px] text-slate-400">
@@ -254,7 +254,7 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
                   min={0}
                   value={maxPerDay}
                   onChange={(e) => setMaxPerDay(Math.max(0, parseInt(e.target.value) || 0))}
-                  className="w-24 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+                  className="w-24 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
                 />
                 <span className="text-xs text-slate-500">
                   {maxPerDay === 0 ? "sem limite" : `disparos/dia`}
@@ -282,7 +282,7 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
               >
                 Cancelar
               </button>

@@ -8,8 +8,18 @@ export async function POST(
 ) {
   const { id } = await params
   const { action, scheduledAt: scheduledAtRaw } = await req.json() as {
-    action: "START" | "PAUSE" | "RESUME" | "SCHEDULE"
+    action: "START" | "PAUSE" | "RESUME" | "SCHEDULE" | "FORCE_DISPATCH"
     scheduledAt?: string
+  }
+
+  if (action === "FORCE_DISPATCH") {
+    const campaign = await prisma.campaign.findUnique({ where: { id }, select: { status: true, forceDispatch: true } })
+    if (!campaign) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
+    if (campaign.status !== "RUNNING")
+      return NextResponse.json({ error: "Só campanhas em execução podem ser forçadas" }, { status: 409 })
+    const newValue = !campaign.forceDispatch
+    await prisma.campaign.update({ where: { id }, data: { forceDispatch: newValue } })
+    return NextResponse.json({ ok: true, forceDispatch: newValue })
   }
 
   if (action === "PAUSE") {
@@ -17,7 +27,8 @@ export async function POST(
     if (!campaign) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
     if (campaign.status !== "RUNNING" && campaign.status !== "SCHEDULED")
       return NextResponse.json({ error: "Só campanhas em execução ou agendadas podem ser pausadas" }, { status: 409 })
-    await prisma.campaign.update({ where: { id }, data: { status: "PAUSED" } })
+    // Sempre limpa forceDispatch ao pausar — retomada volta a respeitar a janela
+    await prisma.campaign.update({ where: { id }, data: { status: "PAUSED", forceDispatch: false } })
     return NextResponse.json({ ok: true })
   }
 

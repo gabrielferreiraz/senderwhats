@@ -27,23 +27,23 @@ export function ScriptsPageClient({ templates, vendedores }: Props) {
   return (
     <div className="max-w-7xl mx-auto">
       {/* Tab bar */}
-      <div className="flex items-center gap-1 mb-6 border-b border-slate-200 dark:border-white/5">
+      <div className="flex items-center gap-0.5 mb-6 border-b border-slate-200 dark:border-white/[0.06]">
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
             onClick={() => setTab(id)}
-            className={`relative flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-colors ${
+            className={`relative flex items-center gap-1.5 px-3 py-2 text-xs font-medium transition-colors ${
               tab === id
-                ? "text-violet-700 dark:text-violet-300"
-                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+                ? "text-slate-900 dark:text-white"
+                : "text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
             }`}
           >
-            <Icon className="w-4 h-4" />
+            <Icon className="w-3.5 h-3.5" />
             {label}
             {tab === id && (
               <motion.span
                 layoutId="scripts-tab-indicator"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-500 rounded-t-full"
+                className="absolute bottom-0 left-0 right-0 h-px bg-violet-500"
               />
             )}
           </button>

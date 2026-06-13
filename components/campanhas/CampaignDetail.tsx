@@ -21,7 +21,12 @@ import {
   WifiOff,
   AlertTriangle,
   Copy,
+  Timer,
+  TrendingUp,
+  Zap as ZapIcon,
+  ZapOff,
 } from "lucide-react"
+import type { ScheduleEstimate } from "@/lib/campaign-estimate"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +73,14 @@ type NextPending = {
   contact: { phone: string; name: string | null }
 } | null
 
+type ScheduleRule = {
+  dayOfWeek: number
+  startTime: string
+  endTime: string
+  maxContacts: number | null
+  maxContactsPeriod: string
+}
+
 type CampaignData = {
   id: string
   name: string
@@ -75,10 +88,14 @@ type CampaignData = {
   scheduledAt: string | null
   minDelay: number
   maxDelay: number
+  maxSendsPerDay: number
+  forceDispatch: boolean
+  scheduleRules: ScheduleRule[]
   vendedor: { nome: string; userId: string }
   list: { name: string; _count: { items: number } } | null
   template: { name: string; _count: { steps: number } } | null
   _counts: Counts
+  estimate: ScheduleEstimate | null
   queueMessages: QueueMessage[]
   sentMessages: SentMessage[]
   failedMessages: FailedMessage[]
@@ -128,6 +145,28 @@ function fmtCountdown(s: number): string {
   const h = Math.floor(m / 60)
   const rm = m % 60
   return rm > 0 ? `${h}h ${rm}min` : `${h}h`
+}
+
+function fmtHours(sec: number): string {
+  if (sec <= 0) return "0h"
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  if (h === 0) return `${m}min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}min`
+}
+
+function fmtEstimateDate(iso: string): string {
+  const d = new Date(iso)
+  const now = new Date()
+  const tomorrow = new Date(now)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  if (d.toDateString() === now.toDateString()) return `Hoje às ${time}`
+  if (d.toDateString() === tomorrow.toDateString()) return `Amanhã às ${time}`
+  const wd = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")
+  const dt = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
+  return `${wd} ${dt} às ${time}`
 }
 
 function parseFailureReason(raw: string | null): string {
@@ -201,12 +240,12 @@ function MetricCard({
   color: string
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none p-5 flex flex-col gap-3">
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
-        <Icon className="w-5 h-5" />
+    <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5 flex flex-col gap-3">
+      <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${color}`}>
+        <Icon className="w-4.5 h-4.5" />
       </div>
       <div>
-        <p className="text-3xl font-bold text-slate-900 dark:text-white">{value.toLocaleString()}</p>
+        <p className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">{value.toLocaleString()}</p>
         <p className="text-xs text-slate-500 mt-0.5">{label}</p>
       </div>
     </div>
@@ -384,7 +423,7 @@ function NextSendCard({
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -8 }}
-      className="rounded-2xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/[0.07] p-5"
+      className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-500/[0.07] p-5"
     >
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-500/20 flex items-center justify-center shrink-0">
@@ -509,7 +548,7 @@ function TabbedLogPanel({
 
   return (
     <div
-      className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none flex flex-col overflow-hidden"
+      className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] flex flex-col overflow-hidden"
       style={{ maxHeight: 460 }}
     >
       {/* Tab header */}
@@ -622,6 +661,138 @@ function TabbedLogPanel({
   )
 }
 
+// ─── Schedule Window Banner ───────────────────────────────────────────────────
+
+function ScheduleWindowBanner({
+  nextWindowStart,
+  forced,
+}: {
+  nextWindowStart: string
+  forced: boolean
+}) {
+  const secsToNext = useCountdown(forced ? null : nextWindowStart)
+  const d = new Date(nextWindowStart)
+  const label = (() => {
+    const now = new Date()
+    const tomorrow = new Date(now)
+    tomorrow.setDate(tomorrow.getDate() + 1)
+    const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    if (d.toDateString() === now.toDateString()) return `hoje às ${time}`
+    if (d.toDateString() === tomorrow.toDateString()) return `amanhã às ${time}`
+    const wd = d.toLocaleDateString("pt-BR", { weekday: "long" })
+    return `${wd} às ${time}`
+  })()
+
+  if (forced) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        className="flex items-center gap-3 px-4 py-3 rounded-xl border border-violet-200 dark:border-violet-500/30 bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 text-sm"
+      >
+        <ZapIcon className="w-4 h-4 shrink-0" />
+        <span className="font-medium flex-1 min-w-0">
+          Disparando fora da janela (modo forçado) — a janela normal retomaria {label}
+        </span>
+      </motion.div>
+    )
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -8 }}
+      className="flex items-center gap-3 px-4 py-3 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 text-sm"
+    >
+      <CalendarClock className="w-4 h-4 shrink-0" />
+      <span className="font-medium flex-1 min-w-0">
+        Fora da janela de envio — retoma {label}
+      </span>
+      {secsToNext !== null && secsToNext > 0 && (
+        <span className="text-xs font-bold font-mono shrink-0 tabular-nums">
+          {fmtCountdown(secsToNext)}
+        </span>
+      )}
+    </motion.div>
+  )
+}
+
+// ─── Estimate Panel ───────────────────────────────────────────────────────────
+
+function EstimatePanel({ estimate, pending }: { estimate: ScheduleEstimate; pending: number }) {
+  const finishSecs = useCountdown(estimate.estimatedFinishAt)
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5">
+      <div className="flex items-center gap-2 mb-4">
+        <TrendingUp className="w-4 h-4 text-violet-500 dark:text-violet-400" />
+        <p className="text-sm font-semibold text-slate-900 dark:text-white">Estimativas de Conclusão</p>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {/* Delay médio */}
+        <div>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-wide">Delay médio</p>
+          <p className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{fmtSec(estimate.avgDelaySeconds)}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">entre disparos</p>
+        </div>
+
+        {/* Janela por dia */}
+        {estimate.windowSecondsPerDay < 86400 && (
+          <div>
+            <p className="text-[10px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-wide">Janela/dia</p>
+            <p className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">{fmtHours(estimate.windowSecondsPerDay)}</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">de envio ativo</p>
+          </div>
+        )}
+
+        {/* Leads por dia */}
+        <div>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-wide">Leads/dia</p>
+          {estimate.leadsPerDay > 0 ? (
+            <>
+              <p className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
+                ~{estimate.leadsPerDay.toLocaleString("pt-BR")}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">{pending.toLocaleString("pt-BR")} na fila</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-bold text-rose-500 mt-0.5">—</p>
+              <p className="text-[10px] text-rose-400 mt-0.5">janela menor que o delay</p>
+            </>
+          )}
+        </div>
+
+        {/* Conclusão estimada */}
+        <div>
+          <p className="text-[10px] font-medium text-slate-400 dark:text-slate-600 uppercase tracking-wide">Conclusão</p>
+          {estimate.estimatedFinishAt && estimate.leadsPerDay > 0 ? (
+            <>
+              <p className="text-sm font-bold text-slate-900 dark:text-white mt-0.5 leading-tight">
+                {fmtEstimateDate(estimate.estimatedFinishAt)}
+              </p>
+              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                <Timer className="w-3 h-3" />
+                {estimate.workingDaysRemaining <= 1
+                  ? "hoje"
+                  : `~${estimate.workingDaysRemaining} dias`}
+                {finishSecs !== null && finishSecs > 0 && finishSecs < 86400 && (
+                  <span className="font-mono">{fmtCountdown(finishSecs)}</span>
+                )}
+              </div>
+            </>
+          ) : (
+            <p className="text-lg font-bold text-slate-400 mt-0.5">—</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function CampaignDetail({ initial }: { initial: CampaignData }) {
@@ -629,6 +800,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const [data, setData] = useState<CampaignData>(initial)
   const [actioning, setActioning] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
+  const [forcingDispatch, setForcingDispatch] = useState(false)
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -692,6 +864,20 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     await fetch(`/api/campaign-messages/${messageId}/send-now`, { method: "POST" })
     await fetchData()
   }, [fetchData])
+
+  const handleForceDispatch = async () => {
+    setForcingDispatch(true)
+    try {
+      const res = await fetch(`/api/campaigns/${initial.id}/action`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "FORCE_DISPATCH" }),
+      })
+      if (res.ok) await fetchData()
+    } finally {
+      setForcingDispatch(false)
+    }
+  }
 
   const callAction = async (action: "START" | "PAUSE" | "RESUME") => {
     setActioning(true)
@@ -786,6 +972,30 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
               <span>{isPaused ? "Retomar" : "Iniciar"}</span>
             </motion.button>
           )}
+          {isRunning && data.scheduleRules.length > 0 && !data.estimate?.inWindow && (
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              onClick={handleForceDispatch}
+              disabled={forcingDispatch}
+              title={data.forceDispatch ? "Parar forçamento e aguardar janela" : "Disparar agora, ignorando a janela de horário"}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 border ${
+                data.forceDispatch
+                  ? "bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 text-violet-600 dark:text-violet-400 border-violet-200 dark:border-violet-500/20"
+                  : "bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"
+              }`}
+            >
+              {forcingDispatch ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : data.forceDispatch ? (
+                <ZapOff className="w-4 h-4" />
+              ) : (
+                <ZapIcon className="w-4 h-4" />
+              )}
+              <span className="hidden sm:inline">
+                {data.forceDispatch ? "Parar Forçamento" : "Forçar Disparos"}
+              </span>
+            </motion.button>
+          )}
           {isRunning && (
             <motion.button
               whileTap={{ scale: 0.96 }}
@@ -800,7 +1010,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
         </div>
       </div>
 
-      {/* ── Instance health banner ───────────────────────────────────────── */}
+      {/* ── Banners: instance health + schedule window ────────────────────── */}
       <AnimatePresence>
         {instanceState !== "open" && instanceState !== "unknown" && (
           <motion.div
@@ -831,6 +1041,13 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
               Reconectar →
             </a>
           </motion.div>
+        )}
+        {isRunning && data.scheduleRules.length > 0 && !data.estimate?.inWindow && data.estimate?.nextWindowStart && (
+          <ScheduleWindowBanner
+            key="schedule-banner"
+            nextWindowStart={data.estimate.nextWindowStart}
+            forced={data.forceDispatch}
+          />
         )}
       </AnimatePresence>
 
@@ -886,6 +1103,11 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
         />
       </div>
 
+      {/* ── Estimate panel ───────────────────────────────────────────────── */}
+      {(isRunning || isPaused) && counts.pending > 0 && data.estimate && (
+        <EstimatePanel estimate={data.estimate} pending={counts.pending} />
+      )}
+
       {/* ── Next Send countdown ──────────────────────────────────────────── */}
       <AnimatePresence>
         {isRunning && data.nextPending && (
@@ -900,7 +1122,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
       {/* ── Progress + Tabbed Logs ────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-[auto_1fr] gap-6 items-start">
         {/* Progress ring */}
-        <div className="rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none p-6 flex flex-col items-center gap-4">
+        <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5 flex flex-col items-center gap-4">
           <div className="relative">
             <ProgressRing progress={progress} status={status} />
             <div className="absolute inset-0 flex flex-col items-center justify-center">

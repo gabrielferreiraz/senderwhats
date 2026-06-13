@@ -82,7 +82,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className={`w-full appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl py-2.5 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all ${
+        className={`w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl py-2.5 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all ${
           Icon ? "pl-10" : "pl-4"
         }`}
       >
@@ -112,7 +112,7 @@ function FormSection({
   children: React.ReactNode
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] shadow-sm dark:shadow-none p-6 space-y-5">
+    <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5 space-y-4">
       <div>
         <p className="text-sm font-semibold text-slate-900 dark:text-white">{title}</p>
         {description && <p className="text-xs text-slate-500 mt-0.5">{description}</p>}
@@ -481,7 +481,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
             onChange={(e) => setName(e.target.value)}
             placeholder="Ex: Promoção de Natal — Clientes Premium"
             autoFocus
-            className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 focus:outline-none focus:border-violet-500/40 transition-all"
+            className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/40 transition-all"
           />
         </div>
       </FormSection>
@@ -581,7 +581,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                     onChange={(e) => setManualNumbers(e.target.value)}
                     rows={5}
                     placeholder={`Cole os números separados por vírgula, espaço ou Enter.\n\nEx:\n5511999999999\n5521988888888, 5531977777777`}
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-700 focus:outline-none focus:border-violet-500/40 transition-all resize-none leading-relaxed"
+                    className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/40 transition-all resize-none leading-relaxed"
                   />
                   <div className="flex items-center justify-between">
                     <p className="text-[10px] text-slate-500 dark:text-slate-600">
@@ -623,7 +623,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                   <select
                     value={entry.id}
                     onChange={(e) => updateAbTemplate(idx, { id: e.target.value })}
-                    className="w-full appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl py-2.5 pl-10 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
+                    className="w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl py-2.5 pl-10 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
                   >
                     <option value="" className="bg-white dark:bg-slate-900 text-slate-400">
                       Selecione um script...
@@ -649,7 +649,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                         weight: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)),
                       })
                     }
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl py-2.5 pl-3 pr-6 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+                    className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl py-2.5 pl-3 pr-6 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
                     %
@@ -707,7 +707,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                   onChange={(e) => setCustomMessage(e.target.value)}
                   rows={4}
                   placeholder={"Olá {nome}! Tudo bem?\n\nUse {[Oi|Olá|E aí]} para variação automática."}
-                  className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-700 focus:outline-none focus:border-violet-500/40 transition-all resize-none"
+                  className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-3 text-sm text-slate-900 dark:text-white font-mono placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/40 transition-all resize-none"
                 />
               </div>
             )}
@@ -740,7 +740,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                 min={0}
                 value={maxSendsPerDay}
                 onChange={(e) => setMaxSendsPerDay(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-28 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+                className="w-28 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
               />
               <span className="text-xs text-slate-500">
                 {maxSendsPerDay === 0 ? "sem limite diário" : "disparos por dia"}
@@ -886,7 +886,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                     value={schedDate}
                     min={todayStr}
                     onChange={(e) => setSchedDate(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500/40 transition-all [color-scheme:dark]"
+                    className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500/40 transition-all [color-scheme:dark]"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -898,7 +898,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                     type="time"
                     value={schedTime}
                     onChange={(e) => setSchedTime(e.target.value)}
-                    className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500/40 transition-all [color-scheme:dark]"
+                    className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-amber-500/40 transition-all [color-scheme:dark]"
                   />
                 </div>
                 {schedIsPast && (
@@ -941,7 +941,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
           <button
             onClick={() => submit("draft")}
             disabled={!!submitting || !weightValid || hasEmptyScript}
-            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-300 dark:border-white/10 text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20 transition-colors disabled:opacity-50"
+            className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20 transition-colors disabled:opacity-50"
           >
             {submitting === "draft" ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             {isEdit ? "Salvar Rascunho" : "Salvar como Rascunho"}

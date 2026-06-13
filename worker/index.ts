@@ -498,8 +498,11 @@ async function tick(): Promise<void> {
 
         // ── Schedule window check (Brasília time, midnight-crossing safe) ────
         if (!isInWindow(campaign.scheduleRules, day, hhmm)) {
-          log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
-          continue
+          if (!campaign.forceDispatch) {
+            log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
+            continue
+          }
+          log("⚡", `"${campaign.name}" forçando disparos fora da janela (${hhmm})`)
         }
 
         // ── Global daily send limit for this campaign ────────────────────────

@@ -61,7 +61,7 @@ function Select({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-4 py-2.5 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/50 transition-all"
+        className="w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-4 py-2.5 pr-8 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/50 transition-all"
       >
         {placeholder && (
           <option value="" className="bg-white dark:bg-slate-900 text-slate-500 dark:text-slate-400">
@@ -281,7 +281,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
         transition={{ type: "spring", stiffness: 380, damping: 30 }}
         className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none"
       >
-        <div className="pointer-events-auto w-full max-w-xl rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-white/10 shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="pointer-events-auto w-full max-w-xl rounded-xl bg-white dark:bg-[#0b0f19] border border-slate-200 dark:border-white/[0.06] shadow-xl flex flex-col max-h-[90vh]">
           {/* Header — fixo no topo */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-white/5 shrink-0">
             <div className="flex items-center gap-2.5">
@@ -314,15 +314,13 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
                     onClick={() => inputRef.current?.click()}
-                    className={`relative flex flex-col items-center justify-center gap-3 p-10 rounded-2xl border-2 border-dashed cursor-pointer transition-all ${
+                    className={`relative flex flex-col items-center justify-center gap-3 p-10 rounded-xl border-2 border-dashed cursor-pointer transition-all ${
                       isDragging
                         ? "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-500/5"
-                        : "border-slate-200 dark:border-white/10 hover:border-slate-300 dark:hover:border-white/20 hover:bg-slate-50 dark:hover:bg-white/[0.02]"
+                        : "border-slate-200 dark:border-white/[0.07] hover:border-slate-300 dark:hover:border-white/20 hover:bg-slate-50 dark:hover:bg-white/[0.02]"
                     }`}
                   >
-                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 dark:bg-emerald-600/10 flex items-center justify-center">
-                      <FileText className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-                    </div>
+                    <FileText className="w-8 h-8 text-emerald-500 dark:text-emerald-400/70" />
                     <div className="text-center">
                       <p className="text-sm font-semibold text-slate-900 dark:text-white">
                         Arraste seu arquivo aqui
@@ -471,7 +469,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                               onKeyDown={(e) => e.key === "Enter" && handleCreateList()}
                               placeholder="Nome da lista, ex: Clientes VIP"
                               autoFocus
-                              className="w-full bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 transition-all"
+                              className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none focus:border-violet-500/50 transition-all"
                             />
 
                             {vendedores.length > 0 && (
@@ -479,7 +477,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                                 <select
                                   value={newListVendedorId}
                                   onChange={(e) => setNewListVendedorId(e.target.value)}
-                                  className="w-full appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-3 py-2 pr-7 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/50 transition-all"
+                                  className="w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-3 py-2 pr-7 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/50 transition-all"
                                 >
                                   <option value="" className="bg-white dark:bg-slate-900 text-slate-400">
                                     Sem vendedor vinculado
@@ -502,7 +500,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                               <button
                                 type="button"
                                 onClick={() => { setShowCreate(false); setNewListName(""); setCreateError("") }}
-                                className="flex-1 py-1.5 rounded-lg border border-slate-300 dark:border-white/10 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                                className="flex-1 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.06] text-xs text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                               >
                                 Cancelar
                               </button>
@@ -632,7 +630,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                   <div className="flex gap-3 pt-1">
                     <button
                       onClick={onClose}
-                      className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-400 dark:hover:border-white/20 transition-colors"
+                      className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:border-slate-300 dark:hover:border-white/20 transition-colors"
                     >
                       Cancelar
                     </button>
@@ -751,7 +749,7 @@ export function ImportCSVModal({ lists, vendedores = [], onClose, onSuccess, onL
                           >
                             <div className="max-h-52 overflow-y-auto border-t border-amber-500/10">
                               <table className="text-[10px] w-full">
-                                <thead className="sticky top-0 bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+                                <thead className="sticky top-0 bg-white/90 dark:bg-[#0b0f19]/90 backdrop-blur-sm">
                                   <tr>
                                     {["Telefone", "Nome", "Vendedor(es)", "Cadastro", "Último Contato"].map((h) => (
                                       <th key={h} className="px-3 py-2 text-left font-semibold text-slate-500 whitespace-nowrap">

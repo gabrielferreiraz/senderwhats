@@ -142,29 +142,28 @@ export function VendedorCard({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      whileHover={{ y: -2 }}
-      transition={{ duration: 0.2 }}
-      className="relative rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none backdrop-blur-sm p-5 flex flex-col gap-4 group"
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={{ duration: 0.15 }}
+      className="relative rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-4 flex flex-col gap-3 group"
     >
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        {/* Avatar */}
-        <div
-          className={`w-11 h-11 rounded-xl bg-gradient-to-br ${getGradient(nome)} flex items-center justify-center text-white font-bold text-sm shadow-lg`}
-        >
-          {initials}
+      {/* Header: avatar + status */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${getGradient(nome)} flex items-center justify-center text-white font-bold text-xs shrink-0`}>
+            {initials}
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-slate-900 dark:text-white text-sm leading-tight truncate">{nome}</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 font-mono mt-0.5 truncate">{userId}</p>
+          </div>
         </div>
 
-        {/* Status badge */}
-        <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${cfg.bg} ${cfg.text}`}>
-          <span className="relative flex h-1.5 w-1.5">
+        <div className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[11px] font-medium ${cfg.bg} ${cfg.text} shrink-0`}>
+          <span className="relative flex h-1.5 w-1.5 shrink-0">
             {(displayStatus === "online" || displayStatus === "waiting_qr") && (
-              <span
-                className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-75`}
-              />
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-75`} />
             )}
             <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${cfg.dot}`} />
           </span>
@@ -172,81 +171,63 @@ export function VendedorCard({
         </div>
       </div>
 
-      {/* Vendor info */}
-      <div>
-        <p className="font-semibold text-slate-900 dark:text-white text-sm">{nome}</p>
-        <p className="text-xs text-slate-400 dark:text-slate-500 font-mono mt-0.5">{userId}</p>
-      </div>
-
       {/* Stats */}
-      <div className="flex items-center gap-4 text-xs text-slate-500">
-        <span className="flex items-center gap-1.5">
+      <div className="flex items-center gap-3 text-[11px] text-slate-400 dark:text-slate-500">
+        <span className="flex items-center gap-1">
           <Megaphone className="w-3 h-3" />
           {campanhasCount} campanha{campanhasCount !== 1 ? "s" : ""}
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="text-slate-200 dark:text-white/10">·</span>
+        <span className="flex items-center gap-1">
           <Users className="w-3 h-3" />
           {listasCount} lista{listasCount !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Actions */}
-      <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-white/5">
+      <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-white/[0.04]">
         {displayStatus === "online" ? (
           <button
             onClick={() => onViewInsights(userId, nome)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-600/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-600/20 transition-colors"
+            className="text-[11px] font-medium px-2.5 py-1 rounded-md text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
           >
-            <RefreshCw className="w-3 h-3" />
             Ver Insights
           </button>
         ) : (
           <button
             onClick={() => onReconnect(userId, nome)}
-            className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-600/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-600/20 transition-colors"
+            className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors"
           >
             <RefreshCw className="w-3 h-3" />
             Reconectar
           </button>
         )}
 
-        <AnimatePresence mode="wait">
-          {confirmDelete ? (
-            <motion.div
-              key="confirm"
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: "auto" }}
-              exit={{ opacity: 0, width: 0 }}
-              className="flex items-center gap-1.5 ml-auto overflow-hidden"
-            >
-              <button
-                onClick={() => setConfirmDelete(false)}
-                className="text-xs px-2 py-1.5 rounded-lg text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+        <div className="ml-auto">
+          <AnimatePresence mode="wait">
+            {confirmDelete ? (
+              <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex items-center gap-1"
               >
-                Cancelar
-              </button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                className="flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors disabled:opacity-50"
-              >
-                {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : null}
-                Confirmar
-              </button>
-            </motion.div>
-          ) : (
-            <motion.button
-              key="delete"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setConfirmDelete(true)}
-              className="ml-auto p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </motion.button>
-          )}
-        </AnimatePresence>
+                <button onClick={() => setConfirmDelete(false)}
+                  className="text-[10px] px-2 py-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                  Cancelar
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors disabled:opacity-50">
+                  {deleting && <Loader2 className="w-3 h-3 animate-spin" />}
+                  Excluir
+                </button>
+              </motion.div>
+            ) : (
+              <motion.button key="delete" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                onClick={() => setConfirmDelete(true)}
+                className="p-1 rounded-md text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/[0.08] transition-colors opacity-0 group-hover:opacity-100">
+                <Trash2 className="w-3.5 h-3.5" />
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
     </motion.div>
   )

@@ -109,47 +109,43 @@ export function CampaignsList({ initial }: Props) {
 
   return (
     <>
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           {campaigns.length > 0
             ? `${campaigns.length} campanha${campaigns.length !== 1 ? "s" : ""}`
-            : "Nenhuma campanha criada ainda"}
+            : "Nenhuma campanha"}
         </p>
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
+        <button
           onClick={() => router.push("/campanhas/nova")}
-          className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors shadow-lg shadow-violet-900/30"
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           Nova Campanha
-        </motion.button>
+        </button>
       </div>
 
       {campaigns.length === 0 ? (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-14 flex flex-col items-center gap-4 text-center"
+          className="rounded-xl border border-dashed border-slate-200 dark:border-white/[0.07] p-16 flex flex-col items-center gap-3 text-center"
         >
-          <div className="w-14 h-14 rounded-2xl bg-violet-50 dark:bg-violet-600/10 flex items-center justify-center">
-            <Megaphone className="w-7 h-7 text-violet-500 dark:text-violet-400" />
-          </div>
+          <Megaphone className="w-8 h-8 text-slate-300 dark:text-slate-700" />
           <div>
-            <p className="font-semibold text-slate-900 dark:text-white">Nenhuma campanha</p>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Nenhuma campanha ainda</p>
+            <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">
               Crie sua primeira campanha para começar a disparar mensagens.
             </p>
           </div>
           <button
             onClick={() => router.push("/campanhas/nova")}
-            className="text-xs font-medium px-4 py-2 rounded-xl bg-violet-50 dark:bg-violet-600/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-600/20 transition-colors"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.07] text-slate-600 dark:text-slate-300 hover:border-violet-300 dark:hover:border-violet-500/30 hover:text-violet-700 dark:hover:text-violet-400 transition-colors mt-1"
           >
-            + Criar agora
+            Criar agora
           </button>
         </motion.div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
           <AnimatePresence>
             {campaigns.map((c) => {
               const { sent, total, failed, pending } = c._stats
@@ -166,91 +162,74 @@ export function CampaignsList({ initial }: Props) {
                 <motion.div
                   key={c.id}
                   layout
-                  initial={{ opacity: 0, y: 16 }}
+                  initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  whileHover={{ y: -2 }}
-                  transition={{ duration: 0.2 }}
-                  className="group rounded-2xl border border-slate-200 dark:border-white/5 bg-white dark:bg-white/[0.03] shadow-sm dark:shadow-none p-5 flex flex-col gap-4"
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.15 }}
+                  className="group rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-4 flex flex-col gap-3"
                 >
                   {/* Header */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-slate-900 dark:text-white text-sm truncate">{c.name}</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
-                        {c.vendedor.nome}
-                        {c.list && <> · {c.list.name}</>}
+                      <p className="font-semibold text-slate-900 dark:text-white text-sm truncate leading-snug">{c.name}</p>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                        {c.vendedor.nome}{c.list && ` · ${c.list.name}`}
                       </p>
                       {isScheduled && c.scheduledAt && (
                         <p className="text-[10px] text-blue-500 dark:text-blue-400 flex items-center gap-1 mt-1">
                           <CalendarClock className="w-3 h-3 shrink-0" />
-                          {new Date(c.scheduledAt).toLocaleString("pt-BR", {
-                            day: "2-digit",
-                            month: "2-digit",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {new Date(c.scheduledAt).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                         </p>
                       )}
                     </div>
                     <StatusBadge status={c.status} />
                   </div>
 
-                  {/* Progress bar */}
-                  {total > 0 && (
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-[10px] text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <BarChart2 className="w-3 h-3" />
-                          {sent.toLocaleString()} / {total.toLocaleString()} enviados
-                        </span>
-                        <span>{progress}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-slate-100 dark:bg-white/[0.07] overflow-hidden">
+                  {/* Progress */}
+                  {total > 0 ? (
+                    <div className="space-y-1">
+                      <div className="h-1 rounded-full bg-slate-100 dark:bg-white/[0.06] overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${progress}%` }}
-                          transition={{ duration: 0.6, ease: "easeOut" }}
+                          transition={{ duration: 0.5, ease: "easeOut" }}
                           className={`h-full rounded-full ${
-                            c.status === "COMPLETED"
-                              ? "bg-emerald-500"
-                              : c.status === "FAILED"
-                              ? "bg-rose-500"
-                              : "bg-violet-500"
+                            c.status === "COMPLETED" ? "bg-emerald-500"
+                            : c.status === "FAILED" ? "bg-rose-500"
+                            : "bg-violet-500"
                           }`}
                         />
                       </div>
-                      <div className="flex gap-3 text-[9px] text-slate-400 dark:text-slate-600">
-                        {pending > 0 && <span>{pending} pendentes</span>}
-                        {failed > 0 && <span className="text-rose-500">{failed} falhas</span>}
+                      <div className="flex justify-between text-[10px] text-slate-400 dark:text-slate-600 tabular-nums">
+                        <span>{sent.toLocaleString()} / {total.toLocaleString()}</span>
+                        <span className="flex items-center gap-2">
+                          {pending > 0 && <span>{pending} pendentes</span>}
+                          {failed > 0 && <span className="text-rose-500">{failed} falhas</span>}
+                          <span>{progress}%</span>
+                        </span>
                       </div>
                     </div>
-                  )}
-
-                  {total === 0 && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-600">
+                  ) : (
+                    <p className="text-[11px] text-slate-400 dark:text-slate-600 flex items-center gap-1.5">
                       <Users className="w-3 h-3" />
                       {isDraft ? "Fila ainda não populada" : "Sem contatos na fila"}
-                    </div>
+                    </p>
                   )}
 
                   {/* Actions */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-slate-100 dark:border-white/[0.04]">
-                    {/* Detail link */}
+                  <div className="flex items-center gap-1.5 pt-1 border-t border-slate-100 dark:border-white/[0.04]">
                     <button
                       onClick={() => router.push(`/campanhas/${c.id}`)}
-                      className="flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-white/[0.04] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200 dark:hover:bg-white/[0.07] transition-colors"
+                      className="text-[11px] font-medium px-2.5 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                     >
-                      <ExternalLink className="w-3 h-3" />
                       Detalhes
                     </button>
 
-                    {/* Start / Pause */}
                     {canStart && (
                       <button
                         onClick={() => callAction(c.id, isPaused ? "RESUME" : "START")}
                         disabled={loading}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-50 dark:bg-violet-600/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-600/20 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors disabled:opacity-50"
                       >
                         <Play className="w-3 h-3" />
                         {isPaused ? "Retomar" : isScheduled ? "Iniciar agora" : "Iniciar"}
@@ -260,60 +239,46 @@ export function CampaignsList({ initial }: Props) {
                       <button
                         onClick={() => callAction(c.id, "PAUSE")}
                         disabled={loading}
-                        className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors disabled:opacity-50"
+                        className="flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50"
                       >
                         <Pause className="w-3 h-3" />
                         Pausar
                       </button>
                     )}
 
-                    {/* Duplicate */}
-                    <button
-                      onClick={() => handleDuplicate(c.id)}
-                      disabled={duplicating === c.id}
-                      title="Duplicar campanha"
-                      className="p-1.5 rounded-lg text-slate-400 dark:text-slate-600 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-50"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="ml-auto flex items-center gap-1">
+                      <button
+                        onClick={() => handleDuplicate(c.id)}
+                        disabled={duplicating === c.id}
+                        title="Duplicar"
+                        className="p-1 rounded-md text-slate-300 dark:text-slate-700 hover:text-slate-600 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors disabled:opacity-50 opacity-0 group-hover:opacity-100"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
 
-                    {/* Delete */}
-                    <AnimatePresence mode="wait">
-                      {confirmDelete === c.id ? (
-                        <motion.div
-                          key="confirm"
-                          initial={{ opacity: 0, x: 8 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          exit={{ opacity: 0, x: 8 }}
-                          className="flex items-center gap-1 ml-auto"
-                        >
-                          <button
-                            onClick={() => setConfirmDelete(null)}
-                            className="text-[10px] px-2 py-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      <AnimatePresence mode="wait">
+                        {confirmDelete === c.id ? (
+                          <motion.div key="confirm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="flex items-center gap-1"
                           >
-                            Não
-                          </button>
-                          <button
-                            onClick={() => handleDelete(c.id)}
-                            disabled={loading}
-                            className="text-[10px] font-medium px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors"
-                          >
-                            Excluir
-                          </button>
-                        </motion.div>
-                      ) : (
-                        <motion.button
-                          key="trash"
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0 }}
-                          onClick={() => setConfirmDelete(c.id)}
-                          className="ml-auto p-1.5 rounded-lg text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </motion.button>
-                      )}
-                    </AnimatePresence>
+                            <button onClick={() => setConfirmDelete(null)}
+                              className="text-[10px] px-2 py-1 rounded-md text-slate-400 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
+                              Não
+                            </button>
+                            <button onClick={() => handleDelete(c.id)} disabled={loading}
+                              className="text-[10px] font-medium px-2 py-1 rounded-md bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors">
+                              Excluir
+                            </button>
+                          </motion.div>
+                        ) : (
+                          <motion.button key="trash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            onClick={() => setConfirmDelete(c.id)}
+                            className="p-1 rounded-md text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/[0.08] transition-colors opacity-0 group-hover:opacity-100">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </motion.button>
+                        )}
+                      </AnimatePresence>
+                    </div>
                   </div>
                 </motion.div>
               )

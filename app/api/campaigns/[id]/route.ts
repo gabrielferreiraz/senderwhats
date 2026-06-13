@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { computeScheduleEstimate } from "@/lib/campaign-estimate"
 
 export async function GET(
   _: NextRequest,
@@ -64,6 +65,15 @@ export async function GET(
     counts[row.status] = row._count._all
   }
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  const pending = counts["PENDING"] ?? 0
+
+  const estimate = computeScheduleEstimate({
+    scheduleRules: campaign.scheduleRules,
+    minDelay: campaign.minDelay,
+    maxDelay: campaign.maxDelay,
+    maxSendsPerDay: campaign.maxSendsPerDay,
+    pending,
+  })
 
   return NextResponse.json({
     ...campaign,
@@ -71,12 +81,13 @@ export async function GET(
     scheduledAt: campaign.scheduledAt?.toISOString() ?? null,
     _counts: {
       total,
-      pending: counts["PENDING"] ?? 0,
+      pending,
       sending: counts["SENDING"] ?? 0,
       sent: counts["SENT"] ?? 0,
       failed: counts["FAILED"] ?? 0,
       completed: counts["COMPLETED"] ?? 0,
     },
+    estimate,
     queueMessages: queueMessages.map((m) => ({
       id: m.id,
       status: m.status,

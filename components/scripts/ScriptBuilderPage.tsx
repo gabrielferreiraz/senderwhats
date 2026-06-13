@@ -104,13 +104,13 @@ function DelayPicker({ value, onChange }: { value: number; onChange: (s: number)
         max={maxByUnit[unit]}
         value={displayValue}
         onChange={(e) => handleAmountChange(parseInt(e.target.value) || 1)}
-        className="w-14 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg px-2 py-1 text-center text-slate-900 dark:text-white text-xs focus:outline-none focus:border-violet-500/40 transition-all"
+        className="w-14 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg px-2 py-1 text-center text-slate-900 dark:text-white text-xs focus:outline-none focus:border-violet-500/40 transition-all"
       />
       <div className="relative">
         <select
           value={unit}
           onChange={(e) => handleUnitChange(e.target.value as "s" | "m" | "h")}
-          className="appearance-none bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-lg pl-2.5 pr-6 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all cursor-pointer"
+          className="appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg pl-2.5 pr-6 py-1 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all cursor-pointer"
         >
           <option value="s" className="bg-slate-900">segundos</option>
           <option value="m" className="bg-slate-900">minutos</option>
@@ -174,7 +174,7 @@ function VarPicker({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.15 }}
-      className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden"
+      className="absolute left-0 top-full mt-1.5 z-50 w-72 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-[#0b0f19] shadow-xl shadow-black/10 dark:shadow-black/30 overflow-hidden"
     >
       {/* Search */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100 dark:border-white/5">
@@ -360,7 +360,7 @@ function SpintaxPicker({
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: -6, scale: 0.97 }}
       transition={{ duration: 0.15 }}
-      className="absolute left-0 top-full mt-1.5 z-50 w-80 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl shadow-black/10 dark:shadow-black/40 overflow-hidden"
+      className="absolute left-0 top-full mt-1.5 z-50 w-80 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-[#0b0f19] shadow-xl shadow-black/10 dark:shadow-black/30 overflow-hidden"
     >
       {/* Header */}
       <div className="px-4 pt-4 pb-3 border-b border-slate-100 dark:border-white/5">
@@ -425,7 +425,7 @@ function SpintaxPicker({
               className={`flex-1 bg-slate-50 dark:bg-white/5 border rounded-lg px-2.5 py-1.5 text-xs text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none transition-all resize-none leading-relaxed overflow-hidden ${
                 focusedOptIdx === i
                   ? "border-violet-400 dark:border-violet-500/50"
-                  : "border-slate-200 dark:border-white/10 focus:border-violet-400 dark:focus:border-violet-500/40"
+                  : "border-slate-200 dark:border-white/[0.06] focus:border-violet-400 dark:focus:border-violet-500/40"
               }`}
             />
             {options.length > 2 && (
@@ -738,10 +738,10 @@ export function ScriptBuilderPage({ template }: Props) {
 
                   {/* Step card */}
                   <div
-                    className={`flex-1 mb-5 rounded-2xl border transition-all duration-200 ${
+                    className={`flex-1 mb-5 rounded-xl border transition-all duration-200 ${
                       isFocused
                         ? "border-violet-400/40 dark:border-violet-500/25 bg-violet-50 dark:bg-violet-600/[0.04]"
-                        : "border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] shadow-sm dark:shadow-none"
+                        : "border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02]"
                     }`}
                   >
                     <div className="p-4 space-y-3">
@@ -776,7 +776,7 @@ export function ScriptBuilderPage({ template }: Props) {
                         <div className="space-y-2">
                           {/* Upload zone or thumbnail */}
                           {step.imageUrl ? (
-                            <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/10">
+                            <div className="relative rounded-xl overflow-hidden border border-slate-200 dark:border-white/[0.06]">
                               {/* eslint-disable-next-line @next/next/no-img-element */}
                               <img
                                 src={step.imageUrl}
@@ -1197,7 +1197,7 @@ export function ScriptBuilderPage({ template }: Props) {
               whileHover={{ scale: 1.02, borderColor: "rgba(139,92,246,0.3)" }}
               whileTap={{ scale: 0.97 }}
               onClick={addStep}
-              className="flex items-center gap-2.5 w-full justify-center py-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-white/[0.08] text-sm text-slate-500 dark:text-slate-600 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-600/[0.04] transition-all"
+              className="flex items-center gap-2.5 w-full justify-center py-3 rounded-xl border-2 border-dashed border-slate-200 dark:border-white/[0.07] text-sm text-slate-500 dark:text-slate-600 hover:text-violet-600 dark:hover:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-600/[0.04] transition-all"
             >
               <Plus className="w-4 h-4" />
               Adicionar passo

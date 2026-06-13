@@ -61,21 +61,19 @@ export function VendedoresGrid({ initial }: Props) {
   return (
     <>
       {/* Header row */}
-      <div className="flex items-center justify-between mb-6">
-        <p className="text-sm text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs text-slate-400 dark:text-slate-500">
           {vendedores.length > 0
-            ? `${vendedores.length} vendedor${vendedores.length !== 1 ? "es" : ""} cadastrado${vendedores.length !== 1 ? "s" : ""}`
-            : "Nenhum vendedor cadastrado ainda"}
+            ? `${vendedores.length} instância${vendedores.length !== 1 ? "s" : ""}`
+            : "Nenhuma instância conectada"}
         </p>
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
+        <button
           onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors shadow-lg shadow-violet-900/30"
+          className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors"
         >
-          <Plus className="w-4 h-4" />
-          Adicionar Vendedor
-        </motion.button>
+          <Plus className="w-3.5 h-3.5" />
+          Adicionar Instância
+        </button>
       </div>
 
       {/* Grid */}
@@ -83,28 +81,26 @@ export function VendedoresGrid({ initial }: Props) {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="rounded-2xl border border-dashed border-slate-300 dark:border-white/10 p-14 flex flex-col items-center gap-4 text-center"
+          className="rounded-xl border border-dashed border-slate-200 dark:border-white/[0.07] p-16 flex flex-col items-center gap-3 text-center"
         >
-          <div className="w-14 h-14 rounded-2xl bg-violet-50 dark:bg-violet-600/10 flex items-center justify-center">
-            <Smartphone className="w-7 h-7 text-violet-500 dark:text-violet-400" />
-          </div>
+          <Smartphone className="w-8 h-8 text-slate-300 dark:text-slate-700" />
           <div>
-            <p className="font-semibold text-slate-900 dark:text-white">Nenhum vendedor conectado</p>
-            <p className="text-sm text-slate-500 mt-1">
-              Clique em &quot;Adicionar Vendedor&quot; para conectar o primeiro WhatsApp.
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Nenhuma instância conectada</p>
+            <p className="text-xs text-slate-400 dark:text-slate-600 mt-1">
+              Conecte o primeiro WhatsApp para começar a disparar mensagens.
             </p>
           </div>
           <button
             onClick={() => setShowAdd(true)}
-            className="text-xs font-medium px-4 py-2 rounded-xl bg-violet-50 dark:bg-violet-600/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-600/20 transition-colors"
+            className="text-xs font-medium px-3 py-1.5 rounded-lg border border-slate-200 dark:border-white/[0.07] text-slate-600 dark:text-slate-300 hover:border-violet-300 dark:hover:border-violet-500/30 hover:text-violet-700 dark:hover:text-violet-400 transition-colors mt-1"
           >
-            + Conectar agora
+            Conectar agora
           </button>
         </motion.div>
       ) : (
         <motion.div
           layout
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"
         >
           <AnimatePresence>
             {vendedores.map((v) => (

@@ -49,7 +49,7 @@ function StatBox({
   color: string
 }) {
   return (
-    <div className="rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/5 p-4 flex flex-col gap-2">
+    <div className="rounded-xl bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] p-4 flex flex-col gap-2">
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${color}`}>
         <Icon className="w-4 h-4" />
       </div>
@@ -123,7 +123,7 @@ export function InsightDrawer({ userId, nome, onClose, onDisconnected }: Props) 
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40"
+        className="fixed inset-0 bg-black/50 z-40"
       />
 
       {/* Drawer */}
@@ -132,7 +132,7 @@ export function InsightDrawer({ userId, nome, onClose, onDisconnected }: Props) 
         animate={{ x: 0 }}
         exit={{ x: "100%" }}
         transition={{ type: "spring", stiffness: 320, damping: 34 }}
-        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-[#0d0f15] border-l border-slate-200 dark:border-white/10 shadow-2xl flex flex-col"
+        className="fixed right-0 top-0 bottom-0 z-50 w-full max-w-md bg-white dark:bg-[#0b0f19] border-l border-slate-200 dark:border-white/[0.06] shadow-2xl flex flex-col"
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-5 border-b border-slate-100 dark:border-white/[0.06]">
@@ -228,7 +228,7 @@ export function InsightDrawer({ userId, nome, onClose, onDisconnected }: Props) 
               </div>
 
               {/* Instance info */}
-              <div className="rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/5 p-4 space-y-2">
+              <div className="rounded-xl bg-slate-50 dark:bg-white/[0.03] border border-slate-200 dark:border-white/[0.06] p-4 space-y-2">
                 <p className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-3">
                   Informações da Instância
                 </p>
@@ -276,7 +276,7 @@ export function InsightDrawer({ userId, nome, onClose, onDisconnected }: Props) 
                 <div className="flex gap-2">
                   <button
                     onClick={() => setConfirmDisconnect(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-300 dark:border-white/10 text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                    className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
                   >
                     Cancelar
                   </button>

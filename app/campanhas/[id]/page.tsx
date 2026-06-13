@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { CampaignDetail } from "@/components/campanhas/CampaignDetail"
+import { computeScheduleEstimate } from "@/lib/campaign-estimate"
 
 export const dynamic = "force-dynamic"
 
@@ -63,6 +64,15 @@ export default async function CampaignDetailPage({
   const counts: Record<string, number> = {}
   for (const row of statusCounts) counts[row.status] = row._count._all
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
+  const pending = counts["PENDING"] ?? 0
+
+  const estimate = computeScheduleEstimate({
+    scheduleRules: campaign.scheduleRules,
+    minDelay: campaign.minDelay,
+    maxDelay: campaign.maxDelay,
+    maxSendsPerDay: campaign.maxSendsPerDay,
+    pending,
+  })
 
   const serialized = {
     id: campaign.id,
@@ -77,6 +87,15 @@ export default async function CampaignDetailPage({
     scheduledAt: campaign.scheduledAt?.toISOString() ?? null,
     minDelay: campaign.minDelay,
     maxDelay: campaign.maxDelay,
+    maxSendsPerDay: campaign.maxSendsPerDay,
+    forceDispatch: campaign.forceDispatch,
+    scheduleRules: campaign.scheduleRules.map((r) => ({
+      dayOfWeek: r.dayOfWeek,
+      startTime: r.startTime,
+      endTime: r.endTime,
+      maxContacts: r.maxContacts,
+      maxContactsPeriod: r.maxContactsPeriod,
+    })),
     vendedor: campaign.vendedor,
     list: campaign.list
       ? { name: campaign.list.name, _count: { items: campaign.list._count.items } }
@@ -86,12 +105,13 @@ export default async function CampaignDetailPage({
       : null,
     _counts: {
       total,
-      pending: counts["PENDING"] ?? 0,
+      pending,
       sending: counts["SENDING"] ?? 0,
       sent: counts["SENT"] ?? 0,
       failed: counts["FAILED"] ?? 0,
       completed: counts["COMPLETED"] ?? 0,
     },
+    estimate,
     queueMessages: queueMessages.map((m) => ({
       id: m.id,
       status: "PENDING" as const,
