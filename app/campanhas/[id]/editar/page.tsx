@@ -61,6 +61,8 @@ export default async function EditarCampanhaPage({
     customMessage: campaign.customMessage,
     minDelay: campaign.minDelay,
     maxDelay: campaign.maxDelay,
+    enableRemarketing: campaign.enableRemarketing,
+    maxSendsPerDay: campaign.maxSendsPerDay,
     scheduleRules: Array.from(ruleMap.values()),
   }
 

@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "RemarketingConfig" ADD COLUMN     "maxDelaySec" INTEGER NOT NULL DEFAULT 45,
+ADD COLUMN     "minDelaySec" INTEGER NOT NULL DEFAULT 15;

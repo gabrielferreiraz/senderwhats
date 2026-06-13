@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
     scheduledAt?: string
     minDelay: number
     maxDelay: number
+    enableRemarketing?: boolean
+    maxSendsPerDay?: number
     autoStart?: boolean
     scheduleRules?: {
       dayOfWeek: number
@@ -75,7 +77,8 @@ export async function POST(req: NextRequest) {
   const {
     name, vendedorId, listId, manualNumbers,
     customMessage, scheduledAt,
-    minDelay, maxDelay, autoStart, scheduleRules,
+    minDelay, maxDelay, enableRemarketing, maxSendsPerDay,
+    autoStart, scheduleRules,
   } = body
 
   if (!name?.trim() || !vendedorId) {
@@ -145,6 +148,8 @@ export async function POST(req: NextRequest) {
           scheduledAt: scheduledDate,
           minDelay: minDelay ?? 10,
           maxDelay: maxDelay ?? 30,
+          enableRemarketing: enableRemarketing ?? false,
+          maxSendsPerDay: maxSendsPerDay ?? 0,
           status,
         },
       })

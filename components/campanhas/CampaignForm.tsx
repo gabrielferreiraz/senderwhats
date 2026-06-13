@@ -22,10 +22,13 @@ import {
   X,
   CheckCircle2,
   RotateCcw,
+  Repeat,
+  Settings2,
 } from "lucide-react"
 import { parsePhones } from "@/lib/phone"
 import { DelayRangeSlider } from "./DelayRangeSlider"
 import { ScheduleRuleBuilder, ScheduleRule, flattenRules } from "./ScheduleRuleBuilder"
+import { RemarketingQuickModal, type RemarketingQuickConfig } from "./RemarketingQuickModal"
 
 type Vendedor = { id: string; nome: string; userId: string }
 type ContactList = { id: string; name: string; _count: { items: number } }
@@ -44,6 +47,8 @@ type InitialData = {
   customMessage: string | null
   minDelay: number
   maxDelay: number
+  enableRemarketing: boolean
+  maxSendsPerDay: number
   scheduleRules: ScheduleRule[]
 }
 
@@ -163,6 +168,10 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
   const [delay, setDelay] = useState<[number, number]>(() =>
     initialData ? [initialData.minDelay, initialData.maxDelay] : [15, 45]
   )
+  const [enableRemarketing, setEnableRemarketing] = useState(() => initialData?.enableRemarketing ?? false)
+  const [maxSendsPerDay, setMaxSendsPerDay] = useState(() => initialData?.maxSendsPerDay ?? 0)
+  const [remarketingConfig, setRemarketingConfig] = useState<RemarketingQuickConfig | null>(null)
+  const [showRemarketingModal, setShowRemarketingModal] = useState(false)
   const [rules, setRules] = useState<ScheduleRule[]>(() => initialData?.scheduleRules ?? [])
   const [dispatchMode, setDispatchMode] = useState<DispatchMode>("now")
   const [schedDate, setSchedDate] = useState("")
@@ -193,6 +202,8 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         setDelay([Number((d.delay as unknown[])[0]) || 15, Number((d.delay as unknown[])[1]) || 45])
       }
       if (Array.isArray(d.rules)) setRules(d.rules as ScheduleRule[])
+      if (typeof d.enableRemarketing === "boolean") setEnableRemarketing(d.enableRemarketing)
+      if (typeof d.maxSendsPerDay === "number") setMaxSendsPerDay(d.maxSendsPerDay)
       if (d.dispatchMode === "scheduled") setDispatchMode("scheduled")
       if (typeof d.schedDate === "string") setSchedDate(d.schedDate as string)
       if (typeof d.schedTime === "string") setSchedTime(d.schedTime as string)
@@ -201,9 +212,40 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     }
     // Autosave: skip if nothing meaningful has been entered
     if (!name) { clearDraft(); return }
-    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, rules, dispatchMode, schedDate, schedTime })
+    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, rules, dispatchMode, schedDate, schedTime])
+  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime])
+
+  // Reset remarketing config when vendedor changes — prevents stale config being posted to the wrong userId
+  const vendedorIdMountedRef = useRef(vendedorId)
+  useEffect(() => {
+    if (vendedorId === vendedorIdMountedRef.current) return
+    vendedorIdMountedRef.current = vendedorId
+    setRemarketingConfig(null)
+  }, [vendedorId])
+
+  // In edit mode, load the existing remarketing config so the summary banner and validation reflect reality
+  useEffect(() => {
+    if (!isEdit || !initialData?.enableRemarketing) return
+    const vendedor = vendedores.find((v) => v.id === (initialData?.vendedorId ?? ""))
+    if (!vendedor) return
+    fetch(`/api/remarketing/config/${vendedor.userId}`)
+      .then((r) => r.json())
+      .then((data: { scripts?: { templateId: string }[]; intervalMinutes?: number; maxPerDay?: number; allowedDays?: string; minDelaySec?: number; maxDelaySec?: number }) => {
+        if (Array.isArray(data.scripts) && data.scripts.length > 0) {
+          setRemarketingConfig({
+            scripts: data.scripts,
+            intervalMinutes: data.intervalMinutes ?? 1440,
+            maxPerDay: data.maxPerDay ?? 0,
+            allowedDays: data.allowedDays ?? "1,2,3,4,5",
+            minDelaySec: data.minDelaySec ?? 15,
+            maxDelaySec: data.maxDelaySec ?? 45,
+          })
+        }
+      })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const discardDraft = () => {
     clearDraft()
@@ -216,6 +258,9 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     setAbTemplates([])
     setCustomMessage("")
     setDelay([15, 45])
+    setEnableRemarketing(false)
+    setMaxSendsPerDay(0)
+    setRemarketingConfig(null)
     setRules([])
     setDispatchMode("now")
     setSchedDate("")
@@ -223,6 +268,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
   }
 
   const selectedList = lists.find((l) => l.id === listId)
+  const selectedVendedor = vendedores.find((v) => v.id === vendedorId)
   const manualCount = countManualNumbers(manualNumbers)
   const todayStr = new Date().toISOString().slice(0, 10)
 
@@ -262,6 +308,10 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       setError("A soma dos pesos deve ser exatamente 100%.")
       return
     }
+    if (enableRemarketing && (!remarketingConfig || remarketingConfig.scripts.length === 0)) {
+      setError("Configure o remarketing antes de ativar. Clique no botão 'Configurar' ao lado do toggle.")
+      return
+    }
     if (mode === "schedule") {
       if (!scheduledAt) { setError("Informe a data e hora para agendar."); return }
       if (schedIsPast) { setError("A data/hora de agendamento deve ser no futuro."); return }
@@ -285,11 +335,22 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
             customMessage: validTemplates.length === 0 && customMessage.trim() ? customMessage.trim() : undefined,
             minDelay: delay[0],
             maxDelay: delay[1],
+            maxSendsPerDay,
+            enableRemarketing,
             scheduleRules: flattenRules(rules),
           }),
         })
         const putData: { ok?: boolean; error?: string } = await putRes.json()
         if (!putRes.ok) { setError(putData.error ?? "Erro ao salvar campanha."); return }
+
+        // Persist remarketing config changes made via the quick modal in edit mode
+        if (enableRemarketing && remarketingConfig && selectedVendedor) {
+          await fetch(`/api/remarketing/config/${selectedVendedor.userId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...remarketingConfig, enabled: true }),
+          }).catch(() => {})
+        }
 
         if (mode === "start") {
           const actionRes = await fetch(`/api/campaigns/${campaignId}/action`, {
@@ -329,6 +390,8 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         customMessage: validTemplates.length === 0 && customMessage.trim() ? customMessage.trim() : undefined,
         minDelay: delay[0],
         maxDelay: delay[1],
+        maxSendsPerDay,
+        enableRemarketing,
         scheduleRules: flattenRules(rules),
         ...(contactMode === "list"
           ? { listId: listId || undefined }
@@ -348,6 +411,16 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       })
       const data: { id?: string; error?: string } = await res.json()
       if (!res.ok) { setError(data.error ?? "Erro ao criar campanha."); return }
+
+      // Save remarketing config in parallel if configured
+      if (enableRemarketing && remarketingConfig && selectedVendedor) {
+        await fetch(`/api/remarketing/config/${selectedVendedor.userId}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...remarketingConfig, enabled: true }),
+        }).catch(() => {})
+      }
+
       clearDraft()
       router.push(mode === "start" ? `/campanhas/${data.id}` : "/campanhas")
     } finally {
@@ -650,7 +723,108 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         <DelayRangeSlider value={delay} onChange={setDelay} />
       </FormSection>
 
-      {/* Section 4: Schedule windows */}
+      {/* Section 4: Daily limit + Remarketing */}
+      <FormSection
+        title="Limites e Remarketing"
+        description="Limite diário de disparos e follow-up automático para quem não responder."
+      >
+        <div className="space-y-5">
+          {/* Daily send limit */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Limite diário de disparos
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                min={0}
+                value={maxSendsPerDay}
+                onChange={(e) => setMaxSendsPerDay(Math.max(0, parseInt(e.target.value) || 0))}
+                className="w-28 bg-slate-50 dark:bg-white/5 border border-slate-300 dark:border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+              />
+              <span className="text-xs text-slate-500">
+                {maxSendsPerDay === 0 ? "sem limite diário" : "disparos por dia"}
+              </span>
+            </div>
+          </div>
+
+          {/* Remarketing toggle */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                  <Repeat className="w-3.5 h-3.5 text-violet-500" />
+                  Remarketing automático
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Contatos que não responderem entram automaticamente no funil de follow-up.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!enableRemarketing) {
+                    setShowRemarketingModal(true)
+                    setEnableRemarketing(true)
+                  } else {
+                    setEnableRemarketing(false)
+                  }
+                }}
+                className={`relative w-11 h-6 rounded-full transition-colors ${
+                  enableRemarketing ? "bg-violet-600" : "bg-slate-300 dark:bg-white/10"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    enableRemarketing ? "translate-x-5" : ""
+                  }`}
+                />
+              </button>
+            </div>
+
+            {/* Remarketing config summary */}
+            <AnimatePresence>
+              {enableRemarketing && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${
+                    remarketingConfig && remarketingConfig.scripts.length > 0
+                      ? "bg-violet-50 dark:bg-violet-600/10 border-violet-200 dark:border-violet-500/20"
+                      : "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
+                  }`}>
+                    <div className="text-xs">
+                      {remarketingConfig && remarketingConfig.scripts.length > 0 ? (
+                        <span className="text-violet-700 dark:text-violet-400 font-medium">
+                          {remarketingConfig.scripts.length} script{remarketingConfig.scripts.length > 1 ? "s" : ""} configurado{remarketingConfig.scripts.length > 1 ? "s" : ""}
+                          {remarketingConfig.maxPerDay > 0 ? ` · Máx ${remarketingConfig.maxPerDay}/dia` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-amber-700 dark:text-amber-400 font-medium">
+                          Configure os scripts de follow-up
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowRemarketingModal(true)}
+                      className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
+                    >
+                      <Settings2 className="w-3 h-3" />
+                      {remarketingConfig ? "Editar" : "Configurar"}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </div>
+      </FormSection>
+
+      {/* Section 5: Schedule windows */}
       <FormSection
         title="Janelas de Envio"
         description="Restrinja os disparos a horários e dias específicos. Sem regras, o worker dispara 24h."
@@ -658,7 +832,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         <ScheduleRuleBuilder value={rules} onChange={setRules} />
       </FormSection>
 
-      {/* Section 5: Programação (Enviar Agora vs Agendar) */}
+      {/* Section 6: Programação (Enviar Agora vs Agendar) */}
       <FormSection
         title="Programação"
         description="Inicie imediatamente ou defina uma data e hora de início automático."
@@ -796,6 +970,24 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
           </motion.button>
         )}
       </div>
+
+      {/* Remarketing quick config modal */}
+      <AnimatePresence>
+        {showRemarketingModal && (
+          <RemarketingQuickModal
+            templates={templates}
+            vendedorUserId={selectedVendedor?.userId ?? ""}
+            onSave={(cfg) => {
+              setRemarketingConfig(cfg)
+              setShowRemarketingModal(false)
+            }}
+            onClose={() => {
+              setShowRemarketingModal(false)
+              if (!remarketingConfig) setEnableRemarketing(false)
+            }}
+          />
+        )}
+      </AnimatePresence>
     </div>
   )
 }

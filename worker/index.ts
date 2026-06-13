@@ -123,11 +123,16 @@ function applyVariables(template: string, contact: ContactLike): string {
 }
 
 const WHATSAPP_BASE = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
+const WHATSAPP_API_KEY = process.env.WHATSAPP_API_KEY ?? ""
+
+function authHeader(): Record<string, string> {
+  return WHATSAPP_API_KEY ? { Authorization: `Bearer ${WHATSAPP_API_KEY}` } : {}
+}
 
 async function sendText(userId: string, number: string, message: string): Promise<void> {
   const res = await fetch(`${WHATSAPP_BASE}/message/send-text/${userId}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...authHeader() },
     body: JSON.stringify({ number, message }),
   })
   if (!res.ok) {
@@ -162,6 +167,7 @@ async function sendImage(
 
   const res = await fetch(`${WHATSAPP_BASE}/message/send-image/${userId}`, {
     method: "POST",
+    headers: { ...authHeader() },
     body: form,
     signal: AbortSignal.timeout(70_000),
   })
@@ -182,7 +188,7 @@ type InstanceSnapshot = { ready: boolean; authenticated: boolean; state: string 
  */
 async function fetchReadyInstances(): Promise<Map<string, InstanceSnapshot> | null> {
   try {
-    const res = await fetch(`${WHATSAPP_BASE}/instance/active`)
+    const res = await fetch(`${WHATSAPP_BASE}/instance/active`, { headers: authHeader() })
     if (!res.ok) {
       log("⚠️", `Falha ao buscar instâncias WhatsApp (${res.status}) — tick ignorado`)
       return null
@@ -452,7 +458,7 @@ async function tick(): Promise<void> {
     const campaigns = await prisma.campaign.findMany({
       where: { status: "RUNNING" },
       include: {
-        vendedor: { select: { userId: true } },
+        vendedor: { select: { userId: true, id: true } },
         scheduleRules: true,
       },
     }).catch((err: unknown) => {
@@ -494,6 +500,27 @@ async function tick(): Promise<void> {
         if (!isInWindow(campaign.scheduleRules, day, hhmm)) {
           log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
           continue
+        }
+
+        // ── Global daily send limit for this campaign ────────────────────────
+        if (campaign.maxSendsPerDay > 0) {
+          let sentToday = 0
+          try {
+            sentToday = await prisma.campaignMessage.count({
+              where: {
+                campaignId: campaign.id,
+                sentAt: { gte: brasiliaStartOfDay() },
+                status: { in: ["SENT", "SENDING", "COMPLETED"] },
+              },
+            })
+          } catch (err) {
+            log("⚠️", `Erro ao contar envios diários de "${campaign.name}": ${errMsg(err)}`)
+            continue
+          }
+          if (sentToday >= campaign.maxSendsPerDay) {
+            log("📊", `"${campaign.name}" atingiu limite de ${campaign.maxSendsPerDay} disparos/dia (${sentToday} enviados)`)
+            continue
+          }
         }
 
         // ── Contact limit per rule (hour / day / week) ────────────────────────
@@ -582,6 +609,19 @@ async function tick(): Promise<void> {
             : `"${campaign.name}" — iniciando próximo lead`
         )
 
+        // Load remarketing config once per campaign batch, not once per message
+        let rmktConfig: { enabled: boolean; intervalMinutes: number; scripts: unknown } | null = null
+        if (campaign.enableRemarketing) {
+          try {
+            rmktConfig = await prisma.remarketingConfig.findUnique({
+              where: { userId: campaign.vendedor.userId },
+              select: { enabled: true, intervalMinutes: true, scripts: true },
+            })
+          } catch (err) {
+            log("⚠️", `Erro ao carregar config de remarketing para "${campaign.name}": ${errMsg(err)}`)
+          }
+        }
+
         for (const msg of messages) {
           // Skip if already processed (race with "send now" or manual action)
           const fresh = await prisma.campaignMessage.findUnique({
@@ -628,6 +668,35 @@ async function tick(): Promise<void> {
             recordSuccess(campaign.id)
           }
 
+          // Enqueue contact in remarketing when campaign message completes (if enabled)
+          if (afterStatus?.status === "COMPLETED" && campaign.enableRemarketing && rmktConfig?.enabled) {
+            try {
+              const scripts = Array.isArray(rmktConfig.scripts) ? rmktConfig.scripts as { templateId: string }[] : []
+              if (scripts.length > 0) {
+                const contact = await prisma.contact.findUnique({
+                  where: { id: msg.contactId },
+                  select: { phone: true, name: true },
+                })
+                if (contact) {
+                  const nextRun = new Date(Date.now() + rmktConfig.intervalMinutes * 60 * 1000)
+                  // Restart the sequence only if the lead is not currently mid-sequence (status != pending)
+                  // This prevents resetting a lead that's already being followed up
+                  await prisma.remarketingLead.updateMany({
+                    where: { userId: campaign.vendedor.userId, number: contact.phone, status: { not: "pending" } },
+                    data: { currentStep: 1, status: "pending", failCount: 0, replied: false, repliedAt: null, triggeredAt: new Date(), nextRun },
+                  })
+                  await prisma.remarketingLead.createMany({
+                    data: [{ userId: campaign.vendedor.userId, number: contact.phone, name: contact.name ?? undefined, nextRun }],
+                    skipDuplicates: true,
+                  })
+                  log("📋", `Remarketing: ${contact.phone} enfileirado após "${campaign.name}"`)
+                }
+              }
+            } catch (err) {
+              log("⚠️", `Erro ao enfileirar remarketing para msg ${msg.id}: ${errMsg(err)}`)
+            }
+          }
+
           // Lead finished → apply between-leads delay to the next PENDING contact
           if (afterStatus?.status === "COMPLETED" || afterStatus?.status === "FAILED") {
             const nextInQueue = await prisma.campaignMessage.findFirst({
@@ -668,6 +737,266 @@ function log(emoji: string, msg: string): void {
   console.log(`[${hh}:${mm}:${ss}] ${emoji}  ${msg}`)
 }
 
+// ─── Remarketing / Follow-Up Scheduler ───────────────────────────────────────
+
+let remarketingTicking = false
+
+/**
+ * Runs every 2 minutes.
+ * For each enabled RemarketingConfig, checks pending leads whose nextRun <= now,
+ * validates time window, fetches templates, sends the next message step,
+ * advances or completes the lead.
+ */
+async function remarketingTick(): Promise<void> {
+  if (remarketingTicking) return
+  remarketingTicking = true
+
+  try {
+    // All enabled remarketing configurations
+    const configs = await prisma.remarketingConfig.findMany({
+      where: { enabled: true },
+    }).catch((err: unknown) => {
+      log("⚠️", `Remarketing: erro ao buscar configs: ${errMsg(err)}`)
+      return null
+    })
+
+    if (!configs || configs.length === 0) return
+
+    const now = new Date()
+
+    for (const config of configs) {
+      try {
+        // ── Time-window check ────────────────────────────────────────────────
+        // Intl.DateTimeFormat can return "24" for midnight and may not zero-pad
+        // on some Node/ICU builds. We parse numeric values and re-format safely.
+        const fmt = new Intl.DateTimeFormat("en-US", {
+          timeZone: config.timezone,
+          hour: "2-digit",
+          minute: "2-digit",
+          weekday: "short",
+          hour12: false,
+        })
+        const parts = fmt.formatToParts(now)
+        const rawHour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24
+        const rawMin  = Number(parts.find((p) => p.type === "minute")?.value ?? "0")
+        const hhmm    = `${String(rawHour).padStart(2, "0")}:${String(rawMin).padStart(2, "0")}`
+
+        // toLocaleString("en-US") produces a parseable date string in the target timezone.
+        // getDay() → 0=Sun…6=Sat; convert to 1=Mon…7=Sun to match allowedDays storage.
+        const localDate = new Date(now.toLocaleString("en-US", { timeZone: config.timezone }))
+        const jsDay   = localDate.getDay()
+        const day1to7 = jsDay === 0 ? 7 : jsDay
+
+        const allowed = config.allowedDays.split(",").map((d) => d.trim())
+        const dayAllowed = allowed.includes(String(day1to7))
+        const inWindow   = dayAllowed && hhmm >= config.windowStart && hhmm < config.windowEnd
+
+        if (!inWindow) continue
+
+        // ── Parse scripts array ──────────────────────────────────────────────
+        type ScriptEntry = { templateId: string; stepLabel?: string }
+        const scripts: ScriptEntry[] = Array.isArray(config.scripts) ? config.scripts as ScriptEntry[] : []
+        if (scripts.length === 0) continue
+
+        // ── Daily send limit ─────────────────────────────────────────────────
+        // startOfLocalDay: subtract elapsed time today (hours + minutes already computed above)
+        const startOfLocalDay = new Date(now.getTime() - (rawHour * 60 + rawMin) * 60 * 1000)
+        if (config.maxPerDay > 0) {
+          let sentToday = 0
+          try {
+            sentToday = await prisma.remarketingLead.count({
+              where: { userId: config.userId, lastSentAt: { gte: startOfLocalDay } },
+            })
+          } catch (err) {
+            log("⚠️", `Remarketing: erro ao contar envios diários para ${config.userId}: ${errMsg(err)}`)
+            continue
+          }
+          if (sentToday >= config.maxPerDay) {
+            log("📊", `Remarketing ${config.userId}: limite diário de ${config.maxPerDay} disparos atingido`)
+            continue
+          }
+        }
+
+        // ── Process ONE lead per tick (anti-ban: one send per 2-minute window) ──
+        // Using take:1 prevents bursting all due leads in a single tick.
+        // Exclude leads that already replied — they should have been auto-completed by webhook,
+        // but filtering here is a safety net.
+        const lead = await prisma.remarketingLead.findFirst({
+          where: {
+            userId: config.userId,
+            status: "pending",
+            replied: false,
+            nextRun: { lte: now },
+          },
+          orderBy: { nextRun: "asc" },
+        })
+
+        if (!lead) continue
+
+        try {
+          // maxFollowUps guard comes first: scriptEntry check below would also
+          // catch this when scripts.length < maxFollowUps, but the log message
+          // and semantics are different — prefer the explicit limit message.
+          if (lead.currentStep > config.maxFollowUps) {
+            await prisma.remarketingLead.update({
+              where: { id: lead.id },
+              data: { status: "completed" },
+            })
+            log("✅", `Remarketing: ${lead.number} atingiu maxFollowUps (${config.maxFollowUps})`)
+          } else {
+            // Determine which script to use based on currentStep (1-based)
+            const scriptEntry = scripts[lead.currentStep - 1]
+            if (!scriptEntry) {
+              await prisma.remarketingLead.update({
+                where: { id: lead.id },
+                data: { status: "completed" },
+              })
+              log("✅", `Remarketing: ${lead.number} completou todos os follow-ups`)
+            } else {
+              const templateId = scriptEntry.templateId?.trim() ?? ""
+              // Validate templateId before querying to avoid stuck leads from empty entries
+              if (!templateId) {
+                const newFails = lead.failCount + 1
+                if (newFails >= 3) {
+                  await prisma.remarketingLead.update({
+                    where: { id: lead.id },
+                    data: { status: "failed", failCount: newFails, nextRun: new Date(Date.now() + config.intervalMinutes * 60 * 1000) },
+                  })
+                  log("🚨", `Remarketing: ${lead.number} falhou — templateId vazio no passo ${lead.currentStep}`)
+                } else {
+                  await prisma.remarketingLead.update({
+                    where: { id: lead.id },
+                    data: { failCount: newFails, nextRun: new Date(Date.now() + 30 * 60 * 1000) },
+                  })
+                  log("⚠️", `Remarketing: templateId vazio no passo ${lead.currentStep} para ${lead.number} — retry em 30min`)
+                }
+              } else {
+                // Remarketing sends only the first step of each assigned template.
+                // Each scripts[] entry is intended to be a single-step template.
+                const step = await prisma.templateStep.findFirst({
+                  where: { templateId, stepOrder: 1 },
+                  select: { body: true, stepType: true, imageUrl: true },
+                })
+
+                if (!step) {
+                  // Template exists but has no steps — treat as a transient config error with retry
+                  const newFails = lead.failCount + 1
+                  if (newFails >= 3) {
+                    await prisma.remarketingLead.update({
+                      where: { id: lead.id },
+                      data: { status: "failed", failCount: newFails },
+                    })
+                    log("🚨", `Remarketing: ${lead.number} falhou — template ${templateId} sem passos (${newFails}x)`)
+                  } else {
+                    await prisma.remarketingLead.update({
+                      where: { id: lead.id },
+                      data: { failCount: newFails, nextRun: new Date(Date.now() + 30 * 60 * 1000) },
+                    })
+                    log("⚠️", `Remarketing: template ${templateId} sem passos para ${lead.number} — retry em 30min`)
+                  }
+                } else {
+
+                  const contactLike: ContactLike = { name: lead.name, phone: lead.number }
+                  const phone = normalizePhone(lead.number)
+
+                  let sendError: string | null = null
+                  try {
+                    if (step.stepType === "image" && step.imageUrl) {
+                      const caption = applyVariables(processSpintax(step.body), contactLike)
+                      await sendImage(config.userId, phone, step.imageUrl, caption)
+                      log("🖼️", `Remarketing: passo ${lead.currentStep} (img) → ${phone}`)
+                    } else if (step.stepType !== "image") {
+                      const text = applyVariables(processSpintax(step.body), contactLike)
+                      await sendText(config.userId, phone, text)
+                      log("📲", `Remarketing: passo ${lead.currentStep} → ${phone}`)
+                    } else {
+                      sendError = "image sem imageUrl"
+                      log("⏩", `Remarketing: imagem sem URL — pulando ${phone}`)
+                    }
+                  } catch (err: unknown) {
+                    sendError = errMsg(err)
+                    log("❌", `Remarketing: falha → ${phone}: ${sendError}`)
+                  }
+
+                  if (sendError) {
+                    const newFails = lead.failCount + 1
+                    if (newFails >= 3) {
+                      await prisma.remarketingLead.update({
+                        where: { id: lead.id },
+                        data: { status: "failed", failCount: newFails },
+                      })
+                      log("🚨", `Remarketing: ${phone} marcado como failed após ${newFails} falhas`)
+                    } else {
+                      await prisma.remarketingLead.update({
+                        where: { id: lead.id },
+                        data: { failCount: newFails, nextRun: new Date(Date.now() + 30 * 60 * 1000) },
+                      })
+                    }
+                  } else {
+                    // Success: advance to next step or complete
+                    const isLastStep = lead.currentStep >= Math.min(config.maxFollowUps, scripts.length)
+                    if (isLastStep) {
+                      await prisma.remarketingLead.update({
+                        where: { id: lead.id },
+                        data: { status: "completed", currentStep: lead.currentStep + 1, lastSentAt: now },
+                      })
+                      log("✅", `Remarketing: ${phone} completou follow-up ${lead.currentStep}/${config.maxFollowUps}`)
+                    } else {
+                      await prisma.remarketingLead.update({
+                        where: { id: lead.id },
+                        data: {
+                          currentStep: lead.currentStep + 1,
+                          nextRun: new Date(Date.now() + config.intervalMinutes * 60 * 1000),
+                          failCount: 0,
+                          lastSentAt: now,
+                        },
+                      })
+                      log("⏩", `Remarketing: ${phone} passo ${lead.currentStep + 1}, próximo em ${config.intervalMinutes}min`)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        } catch (err) {
+          log("⚠️", `Remarketing: erro inesperado no lead ${lead.id}: ${errMsg(err)}`)
+        }
+
+        // ── Anti-ban: defer the next already-due lead by a random delay ────────
+        // Same pattern as the campaign worker: after sending to one lead,
+        // postpone the next ready lead so sends aren't back-to-back.
+        if (config.minDelaySec > 0) {
+          try {
+            const nextReady = await prisma.remarketingLead.findFirst({
+              where: {
+                userId: config.userId,
+                status: "pending",
+                nextRun: { lte: new Date() },
+                id: { not: lead.id },
+              },
+              orderBy: { nextRun: "asc" },
+            })
+            if (nextReady) {
+              const delaySec = randomBetween(config.minDelaySec, config.maxDelaySec)
+              await prisma.remarketingLead.updateMany({
+                where: { id: nextReady.id },
+                data: { nextRun: new Date(Date.now() + delaySec * 1000) },
+              })
+              log("⏳", `Remarketing: próximo lead aguardando ${delaySec}s`)
+            }
+          } catch (err) {
+            log("⚠️", `Remarketing: erro ao aplicar delay anti-ban: ${errMsg(err)}`)
+          }
+        }
+      } catch (err) {
+        log("⚠️", `Remarketing: erro na config userId=${config.userId}: ${errMsg(err)}`)
+      }
+    }
+  } finally {
+    remarketingTicking = false
+  }
+}
+
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 const { hhmm: bootTime } = brasiliaDateParts()
@@ -681,3 +1010,6 @@ console.log("Tick: a cada 10 segundos\n")
 
 tick()
 cron.schedule("*/10 * * * * *", tick)
+
+remarketingTick()
+cron.schedule("*/2 * * * *", remarketingTick)

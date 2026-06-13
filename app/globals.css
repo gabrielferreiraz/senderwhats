@@ -45,6 +45,27 @@ html.dark body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Reusable form input */
+.field-input {
+  width: 100%;
+  font-size: 0.875rem;
+  background-color: white;
+  border: 1px solid rgb(226 232 240);
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  color: rgb(15 23 42);
+  outline: none;
+  transition: box-shadow 0.15s;
+}
+.field-input:focus {
+  box-shadow: 0 0 0 2px rgb(139 92 246 / 0.3);
+}
+html.dark .field-input {
+  background-color: rgb(255 255 255 / 0.03);
+  border-color: rgb(255 255 255 / 0.1);
+  color: white;
+}
+
 /* Seleção de texto */
 ::selection {
   background: rgba(139, 92, 246, 0.25);

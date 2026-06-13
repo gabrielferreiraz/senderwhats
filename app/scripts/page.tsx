@@ -1,22 +1,30 @@
 import { prisma } from "@/lib/prisma"
-import { ScriptsList } from "@/components/scripts/ScriptsList"
+import { ScriptsPageClient } from "@/components/scripts/ScriptsPageClient"
 
 export const dynamic = "force-dynamic"
 
 export default async function ScriptsPage() {
-  const templates = await prisma.messageTemplate.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { steps: true } } },
-  })
+  const [templates, vendedores] = await Promise.all([
+    prisma.messageTemplate.findMany({
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { steps: true } } },
+    }),
+    prisma.vendedor.findMany({
+      where: { ativo: true },
+      orderBy: { nome: "asc" },
+      select: { id: true, nome: true, userId: true },
+    }),
+  ])
 
-  const serialized = templates.map((t) => ({
+  const serializedTemplates = templates.map((t) => ({
     ...t,
     createdAt: t.createdAt.toISOString(),
   }))
 
   return (
-    <div className="max-w-7xl mx-auto">
-      <ScriptsList initial={serialized} />
-    </div>
+    <ScriptsPageClient
+      templates={serializedTemplates}
+      vendedores={vendedores}
+    />
   )
 }

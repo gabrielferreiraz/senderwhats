@@ -73,18 +73,20 @@ model TemplateStep {
 }
 
 model Campaign {
-  id            String                 @id @default(cuid())
-  name          String
-  vendedorId    String                 // Vendedor responsável por esta campanha
-  listId        String?
-  templateId    String?
-  templates     Json?                  // A/B testing: [{ id: string, weight: number }]
-  customMessage String?                // Mensagem direta (quando não há script)
-  scheduledAt   DateTime?              // Se definido, campanha inicia automaticamente nessa data/hora
-  status        CampaignStatus         @default(DRAFT)
-  minDelay      Int                    @default(10)  // segundos
-  maxDelay      Int                    @default(30)  // segundos
-  createdAt     DateTime               @default(now())
+  id                String                 @id @default(cuid())
+  name              String
+  vendedorId        String                 // Vendedor responsável por esta campanha
+  listId            String?
+  templateId        String?
+  templates         Json?                  // A/B testing: [{ id: string, weight: number }]
+  customMessage     String?                // Mensagem direta (quando não há script)
+  scheduledAt       DateTime?              // Se definido, campanha inicia automaticamente nessa data/hora
+  status            CampaignStatus         @default(DRAFT)
+  minDelay          Int                    @default(10)  // segundos
+  maxDelay          Int                    @default(30)  // segundos
+  enableRemarketing Boolean                @default(false)
+  maxSendsPerDay    Int                    @default(0)   // 0 = sem limite diário
+  createdAt         DateTime               @default(now())
   vendedor      Vendedor               @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
   list          ContactList?           @relation(fields: [listId], references: [id], onDelete: SetNull)
   template      MessageTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -126,6 +128,8 @@ model CampaignMessage {
   templateId    String?
   whatsappMsgId String?
   sentAt        DateTime?
+  replied       Boolean   @default(false)
+  repliedAt     DateTime?
   failureReason    String?
   failureCategory  String?    // "no_whatsapp" | "session_error" | "timeout" | "unknown"
   createdAt        DateTime   @default(now())
@@ -144,4 +148,44 @@ enum MessageStatus {
   FAILED
   COMPLETED
   SKIPPED
+}
+
+// ─── Remarketing / Follow-Up automático ───────────────────────────────────────
+
+model RemarketingConfig {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  enabled         Boolean  @default(false)
+  maxFollowUps    Int      @default(3)
+  intervalMinutes Int      @default(1440)   // Minutos entre follow-ups do MESMO lead (ex: 1440 = 24h)
+  minDelaySec     Int      @default(15)     // Delay mínimo em segundos entre leads diferentes (anti-ban)
+  maxDelaySec     Int      @default(45)     // Delay máximo em segundos entre leads diferentes (anti-ban)
+  maxPerDay       Int      @default(0)      // 0 = sem limite diário de disparos
+  allowedDays     String   @default("1,2,3,4,5")  // CSV de dias: 1=Seg…7=Dom
+  windowStart     String   @default("09:00")
+  windowEnd       String   @default("18:00")
+  timezone        String   @default("America/Campo_Grande")
+  scripts         Json     @default("[]")   // [{ templateId: string, stepLabel?: string }]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model RemarketingLead {
+  id          String   @id @default(cuid())
+  userId      String
+  number      String
+  name        String?
+  currentStep Int      @default(1)
+  nextRun     DateTime
+  triggeredAt DateTime @default(now())
+  status      String    @default("pending")  // pending | completed | failed | stop_by_admin
+  failCount   Int       @default(0)
+  lastSentAt  DateTime?
+  replied     Boolean   @default(false)
+  repliedAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([userId, number])
+  @@index([status, nextRun])
+  @@index([userId, status])
 }

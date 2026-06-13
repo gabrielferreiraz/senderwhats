@@ -124,6 +124,8 @@ export async function PUT(
     customMessage?: string
     minDelay?: number
     maxDelay?: number
+    enableRemarketing?: boolean
+    maxSendsPerDay?: number
     scheduleRules?: {
       dayOfWeek: number
       startTime: string
@@ -135,7 +137,7 @@ export async function PUT(
 
   // ── Full edit (from edit page, DRAFT campaigns only) ───────────────────────
   if (body.fullEdit) {
-    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, scheduleRules } = body
+    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, enableRemarketing, maxSendsPerDay, scheduleRules } = body
 
     if (!name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     if (!vendedorId)   return NextResponse.json({ error: "Vendedor é obrigatório" }, { status: 400 })
@@ -165,6 +167,8 @@ export async function PUT(
           customMessage: customMessage?.trim() || null,
           minDelay: minDelay ?? 10,
           maxDelay: maxDelay ?? 30,
+          ...(enableRemarketing !== undefined && { enableRemarketing }),
+          ...(maxSendsPerDay !== undefined && { maxSendsPerDay }),
         },
       })
       await tx.campaignScheduleRule.deleteMany({ where: { campaignId: id } })
