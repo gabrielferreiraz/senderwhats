@@ -98,8 +98,6 @@ type CampaignData = {
   rmktWindowStart: string
   rmktWindowEnd: string
   rmktAllowedDays: string
-  rmktMinDelaySec: number
-  rmktMaxDelaySec: number
   rmktMaxPerDay: number
   scheduleRules: ScheduleRule[]
   vendedor: { nome: string; userId: string }

@@ -53,8 +53,6 @@ type InitialData = {
   rmktWindowStart: string
   rmktWindowEnd: string
   rmktAllowedDays: string
-  rmktMinDelaySec: number
-  rmktMaxDelaySec: number
   rmktMaxPerDay: number
   maxSendsPerDay: number
   scheduleRules: ScheduleRule[]
@@ -192,10 +190,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
   const [rmktWindowStart, setRmktWindowStart] = useState(() => initialData?.rmktWindowStart ?? "09:00")
   const [rmktWindowEnd, setRmktWindowEnd] = useState(() => initialData?.rmktWindowEnd ?? "18:00")
   const [rmktAllowedDays, setRmktAllowedDays] = useState(() => initialData?.rmktAllowedDays ?? "1,2,3,4,5")
-  const [rmktDelay, setRmktDelay] = useState<[number, number]>(() => [
-    initialData?.rmktMinDelaySec ?? 15,
-    initialData?.rmktMaxDelaySec ?? 45,
-  ])
   const [rmktMaxPerDay, setRmktMaxPerDay] = useState(() => initialData?.rmktMaxPerDay ?? 0)
   const [maxSendsPerDay, setMaxSendsPerDay] = useState(() => initialData?.maxSendsPerDay ?? 0)
   const [rules, setRules] = useState<ScheduleRule[]>(() => initialData?.scheduleRules ?? [])
@@ -234,9 +228,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       if (typeof d.rmktWindowStart === "string") setRmktWindowStart(d.rmktWindowStart as string)
       if (typeof d.rmktWindowEnd === "string") setRmktWindowEnd(d.rmktWindowEnd as string)
       if (typeof d.rmktAllowedDays === "string") setRmktAllowedDays(d.rmktAllowedDays as string)
-      if (Array.isArray(d.rmktDelay) && (d.rmktDelay as unknown[]).length === 2) {
-        setRmktDelay([Number((d.rmktDelay as unknown[])[0]) || 15, Number((d.rmktDelay as unknown[])[1]) || 45])
-      }
       if (typeof d.rmktMaxPerDay === "number") setRmktMaxPerDay(d.rmktMaxPerDay as number)
       if (typeof d.maxSendsPerDay === "number") setMaxSendsPerDay(d.maxSendsPerDay as number)
       if (d.dispatchMode === "scheduled") setDispatchMode("scheduled")
@@ -247,9 +238,9 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     }
     // Autosave: skip if nothing meaningful has been entered
     if (!name) { clearDraft(); return }
-    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktDelay, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime })
+    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktDelay, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime])
+  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime])
 
 
   const discardDraft = () => {
@@ -269,7 +260,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     setRmktWindowStart("09:00")
     setRmktWindowEnd("18:00")
     setRmktAllowedDays("1,2,3,4,5")
-    setRmktDelay([15, 45])
     setRmktMaxPerDay(0)
     setMaxSendsPerDay(0)
     setRules([])
@@ -359,8 +349,8 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
             rmktWindowStart,
             rmktWindowEnd,
             rmktAllowedDays,
-            rmktMinDelaySec: rmktDelay[0],
-            rmktMaxDelaySec: rmktDelay[1],
+            rmktMinDelaySec: delay[0],
+            rmktMaxDelaySec: delay[1],
             rmktMaxPerDay,
             scheduleRules: flattenRules(rules),
           }),
@@ -414,8 +404,8 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         rmktWindowStart,
         rmktWindowEnd,
         rmktAllowedDays,
-        rmktMinDelaySec: rmktDelay[0],
-        rmktMaxDelaySec: rmktDelay[1],
+        rmktMinDelaySec: delay[0],
+        rmktMaxDelaySec: delay[1],
         rmktMaxPerDay,
         scheduleRules: flattenRules(rules),
         ...(contactMode === "list"
@@ -900,12 +890,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
                         </div>
                       )}
                     </div>
-                  </div>
-
-                  {/* Anti-ban delay */}
-                  <div className="space-y-1.5">
-                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Delay anti-ban entre leads</p>
-                    <DelayRangeSlider value={rmktDelay} onChange={setRmktDelay} min={5} max={300} />
                   </div>
 
                   {/* Max per day */}

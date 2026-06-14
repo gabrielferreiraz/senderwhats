@@ -95,8 +95,6 @@ export default async function CampaignDetailPage({
     rmktWindowStart: campaign.rmktWindowStart,
     rmktWindowEnd: campaign.rmktWindowEnd,
     rmktAllowedDays: campaign.rmktAllowedDays,
-    rmktMinDelaySec: campaign.rmktMinDelaySec,
-    rmktMaxDelaySec: campaign.rmktMaxDelaySec,
     rmktMaxPerDay: campaign.rmktMaxPerDay,
     scheduleRules: campaign.scheduleRules.map((r) => ({
       dayOfWeek: r.dayOfWeek,

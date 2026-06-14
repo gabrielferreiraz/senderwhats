@@ -67,8 +67,6 @@ export default async function EditarCampanhaPage({
     rmktWindowStart: campaign.rmktWindowStart,
     rmktWindowEnd: campaign.rmktWindowEnd,
     rmktAllowedDays: campaign.rmktAllowedDays,
-    rmktMinDelaySec: campaign.rmktMinDelaySec,
-    rmktMaxDelaySec: campaign.rmktMaxDelaySec,
     rmktMaxPerDay: campaign.rmktMaxPerDay,
     maxSendsPerDay: campaign.maxSendsPerDay,
     scheduleRules: Array.from(ruleMap.values()),
