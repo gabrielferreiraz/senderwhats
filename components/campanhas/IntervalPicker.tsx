@@ -12,14 +12,7 @@ const FACTORS: Record<Unit, number> = {
   weeks: 10080,
 }
 
-const LABELS: Record<Unit, string> = {
-  minutes: "Minutos",
-  hours: "Horas",
-  days: "Dias",
-  weeks: "Semanas",
-}
-
-const MIN_MINUTES: Record<Unit, number> = {
+const MIN_DISPLAY: Record<Unit, number> = {
   minutes: 30,
   hours: 1,
   days: 1,
@@ -41,35 +34,31 @@ type Props = {
 
 export function IntervalPicker({ value, onChange, className = "" }: Props) {
   const [unit, setUnit] = useState<Unit>(() => detectUnit(value))
-  const displayValue = Math.round(value / FACTORS[unit]) || 1
+  const displayValue = Math.max(1, Math.round(value / FACTORS[unit]))
 
   const handleValueChange = useCallback((raw: string) => {
     const n = parseInt(raw, 10)
-    if (isNaN(n) || n < 1) return
+    if (isNaN(n) || n < MIN_DISPLAY[unit]) return
     onChange(n * FACTORS[unit])
   }, [unit, onChange])
 
   const handleUnitChange = useCallback((newUnit: Unit) => {
-    // Keep the underlying minutes value — just change how it's displayed.
-    // e.g. "24 horas" → switch to "dias" → shows "1 dia" (1440 min unchanged)
+    // Snap value to nearest whole unit so displayed number always matches stored minutes.
+    // e.g. "24 horas" (1440 min) → switch to "dias" → snap to 1 dia (1440 min, unchanged)
+    // e.g. "30 minutos" → switch to "horas" → snap to 1 hora (60 min)
+    const rounded = Math.max(1, Math.round(value / FACTORS[newUnit]))
     setUnit(newUnit)
-  }, [])
+    onChange(rounded * FACTORS[newUnit])
+  }, [value, onChange])
 
   const summaryLabel = (() => {
-    const mins = value
-    if (mins >= 10080) {
-      const weeks = mins / 10080
-      return weeks === 1 ? "1 semana" : `${weeks} semanas`
+    const n = displayValue
+    switch (unit) {
+      case "weeks":  return n === 1 ? "1 semana"  : `${n} semanas`
+      case "days":   return n === 1 ? "1 dia"     : `${n} dias`
+      case "hours":  return n === 1 ? "1 hora"    : `${n} horas`
+      default:       return n === 1 ? "1 minuto"  : `${n} minutos`
     }
-    if (mins >= 1440) {
-      const days = mins / 1440
-      return days === 1 ? "1 dia" : `${days} dias`
-    }
-    if (mins >= 60) {
-      const hours = mins / 60
-      return hours === 1 ? "1 hora" : `${hours} horas`
-    }
-    return mins === 1 ? "1 minuto" : `${mins} minutos`
   })()
 
   return (
@@ -78,7 +67,7 @@ export function IntervalPicker({ value, onChange, className = "" }: Props) {
         {/* Number */}
         <input
           type="number"
-          min={MIN_MINUTES[unit]}
+          min={MIN_DISPLAY[unit]}
           value={displayValue}
           onChange={(e) => handleValueChange(e.target.value)}
           className="w-20 min-w-0 bg-transparent px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none text-center tabular-nums"

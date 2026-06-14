@@ -89,6 +89,7 @@ export default async function CampaignDetailPage({
     maxDelay: campaign.maxDelay,
     maxSendsPerDay: campaign.maxSendsPerDay,
     forceDispatch: campaign.forceDispatch,
+    enableRemarketing: campaign.enableRemarketing,
     scheduleRules: campaign.scheduleRules.map((r) => ({
       dayOfWeek: r.dayOfWeek,
       startTime: r.startTime,

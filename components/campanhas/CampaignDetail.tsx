@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState, useMemo } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useRouter } from "next/navigation"
 import {
@@ -25,6 +25,8 @@ import {
   TrendingUp,
   Zap as ZapIcon,
   ZapOff,
+  Repeat,
+  MessageCircle,
 } from "lucide-react"
 import type { ScheduleEstimate } from "@/lib/campaign-estimate"
 
@@ -90,6 +92,7 @@ type CampaignData = {
   maxDelay: number
   maxSendsPerDay: number
   forceDispatch: boolean
+  enableRemarketing: boolean
   scheduleRules: ScheduleRule[]
   vendedor: { nome: string; userId: string }
   list: { name: string; _count: { items: number } } | null
@@ -793,6 +796,166 @@ function EstimatePanel({ estimate, pending }: { estimate: ScheduleEstimate; pend
   )
 }
 
+// ─── Remarketing Section ──────────────────────────────────────────────────────
+
+type RmktLead = {
+  id: string
+  number: string
+  name: string | null
+  currentStep: number
+  nextRun: string
+  status: string
+  replied: boolean
+  failCount: number
+  lastSentAt: string | null
+}
+
+const RMKT_STATUS: Record<string, { label: string; cls: string }> = {
+  pending:       { label: "Aguardando",  cls: "text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10" },
+  completed:     { label: "Concluído",   cls: "text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10" },
+  failed:        { label: "Falhou",      cls: "text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-500/10" },
+  stop_by_admin: { label: "Parado",      cls: "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5" },
+}
+
+function RemarketingSection({ campaignId, isRunning }: { campaignId: string; isRunning: boolean }) {
+  const [leads, setLeads] = useState<RmktLead[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const fetchLeads = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/remarketing-leads`, { cache: "no-store" })
+      if (res.ok) {
+        setLeads(await res.json() as RmktLead[])
+        setError(false)
+      } else {
+        setError(true)
+      }
+    } catch {
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [campaignId])
+
+  useEffect(() => { fetchLeads() }, [fetchLeads])
+
+  // Poll every 30s while running
+  useEffect(() => {
+    if (!isRunning) return
+    const id = setInterval(fetchLeads, 30_000)
+    return () => clearInterval(id)
+  }, [isRunning, fetchLeads])
+
+  const pending = useMemo(() => leads.filter((l) => l.status === "pending").length, [leads])
+  const replied = useMemo(() => leads.filter((l) => l.replied).length, [leads])
+
+  return (
+    <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/[0.04]">
+        <div className="flex items-center gap-2.5">
+          <Repeat className="w-4 h-4 text-violet-500" />
+          <span className="font-semibold text-sm text-slate-900 dark:text-white">Follow-up automático</span>
+          {leads.length > 0 && (
+            <span className="text-xs text-slate-400">({leads.length} contato{leads.length !== 1 ? "s" : ""})</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          {pending > 0 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              {pending} aguardando
+            </span>
+          )}
+          {replied > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <MessageCircle className="w-3 h-3" />
+              {replied} responderam
+            </span>
+          )}
+          <button
+            onClick={fetchLeads}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-10">
+          <div className="w-5 h-5 border-2 border-violet-500/30 border-t-violet-500 rounded-full animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="py-10 text-center">
+          <AlertTriangle className="w-6 h-6 text-rose-400 mx-auto mb-2" />
+          <p className="text-sm text-rose-500">Erro ao carregar follow-ups.</p>
+          <button onClick={fetchLeads} className="mt-2 text-[11px] text-violet-500 hover:underline">Tentar novamente</button>
+        </div>
+      ) : leads.length === 0 ? (
+        <div className="py-10 text-center">
+          <Repeat className="w-6 h-6 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+          <p className="text-sm text-slate-400">Nenhum contato em follow-up ainda.</p>
+          <p className="text-[11px] text-slate-400 mt-1">Os contatos aparecerão aqui quando um envio for concluído.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-white/[0.04]">
+                <th className="text-left px-5 py-3">Contato</th>
+                <th className="text-left px-5 py-3">Passo</th>
+                <th className="text-left px-5 py-3 hidden sm:table-cell">Próximo envio</th>
+                <th className="text-left px-5 py-3">Status</th>
+                <th className="text-left px-5 py-3 hidden md:table-cell">Resposta</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-white/[0.03]">
+              {leads.map((lead) => {
+                const s = RMKT_STATUS[lead.status] ?? { label: lead.status, cls: "text-slate-400 bg-slate-100" }
+                const isPast = lead.status === "pending" && new Date(lead.nextRun) <= new Date()
+                return (
+                  <tr key={lead.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                    <td className="px-5 py-3">
+                      <p className="text-xs font-medium text-slate-900 dark:text-white">
+                        {lead.name ?? fmtPhone(lead.number)}
+                      </p>
+                      <p className="text-[10px] font-mono text-slate-400">{fmtPhone(lead.number)}</p>
+                    </td>
+                    <td className="px-5 py-3 text-xs text-slate-500 dark:text-slate-400">
+                      {lead.currentStep}º follow-up
+                    </td>
+                    <td className="px-5 py-3 hidden sm:table-cell">
+                      <span className={`text-xs ${isPast ? "text-violet-500 dark:text-violet-400 font-semibold" : "text-slate-400"}`}>
+                        {isPast ? "Enviando em breve..." : new Date(lead.nextRun).toLocaleString("pt-BR")}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${s.cls}`}>
+                        {s.label}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 hidden md:table-cell">
+                      {lead.replied ? (
+                        <span className="flex items-center gap-1 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          <MessageCircle className="w-3 h-3" />
+                          Respondeu
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-slate-400">—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function CampaignDetail({ initial }: { initial: CampaignData }) {
@@ -1215,6 +1378,11 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           onTabChange={setActiveTab}
         />
       </div>
+
+      {/* ── Follow-up / Remarketing section ──────────────────────────────── */}
+      {data.enableRemarketing && (
+        <RemarketingSection campaignId={initial.id} isRunning={isRunning} />
+      )}
     </div>
   )
 }

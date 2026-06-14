@@ -139,6 +139,7 @@ async function sendText(userId: string, number: string, message: string): Promis
     const text = await res.text()
     throw new Error(`WhatsApp API → ${res.status}: ${text}`)
   }
+  recordSend(userId)
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -175,6 +176,7 @@ async function sendImage(
     const text = await res.text()
     throw new Error(`WhatsApp API → ${res.status}: ${text}`)
   }
+  recordSend(userId)
 }
 
 type InstanceSnapshot = { ready: boolean; authenticated: boolean; state: string | null }
@@ -234,6 +236,24 @@ function randomBetween(min: number, max: number): number {
 
 function errMsg(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// ─── Global per-instance rate limiter ─────────────────────────────────────────
+// Prevents campaign tick and remarketing tick from sending to the same WhatsApp
+// instance back-to-back without respecting the anti-ban gap.
+// tryAcquireSendSlot is a synchronous test-and-set — safe in Node.js's
+// single-threaded event loop: no yield between the check and the Map.set().
+const lastSentByUser = new Map<string, number>() // userId → last send timestamp (ms)
+
+function tryAcquireSendSlot(userId: string, minGapMs: number): boolean {
+  const last = lastSentByUser.get(userId)
+  if (last !== undefined && Date.now() - last < minGapMs) return false
+  lastSentByUser.set(userId, Date.now()) // reserve slot optimistically
+  return true
+}
+
+function recordSend(userId: string): void {
+  lastSentByUser.set(userId, Date.now())
 }
 
 function classifyFailure(reason: string): string {
@@ -650,6 +670,13 @@ async function tick(): Promise<void> {
             continue
           }
 
+          // Global rate limiter: if remarketing (or another campaign) sent from
+          // this instance very recently, wait for the next tick to avoid back-to-back sends.
+          if (!tryAcquireSendSlot(campaign.vendedor.userId, campaign.minDelay * 1000)) {
+            log("⏳", `"${campaign.name}" aguardando rate global da instância (envio recente de outra origem)`)
+            break
+          }
+
           try {
             await processMessage(
               msg.id,
@@ -700,10 +727,10 @@ async function tick(): Promise<void> {
                   // This prevents resetting a lead that's already being followed up
                   await prisma.remarketingLead.updateMany({
                     where: { userId: campaign.vendedor.userId, number: contact.phone, status: { not: "pending" } },
-                    data: { currentStep: 1, status: "pending", failCount: 0, replied: false, repliedAt: null, triggeredAt: new Date(), nextRun },
+                    data: { currentStep: 1, status: "pending", failCount: 0, replied: false, repliedAt: null, triggeredAt: new Date(), nextRun, campaignId: campaign.id },
                   })
                   await prisma.remarketingLead.createMany({
-                    data: [{ userId: campaign.vendedor.userId, number: contact.phone, name: contact.name ?? undefined, nextRun }],
+                    data: [{ userId: campaign.vendedor.userId, number: contact.phone, name: contact.name ?? undefined, nextRun, campaignId: campaign.id }],
                     skipDuplicates: true,
                   })
                   log("📋", `Remarketing: ${contact.phone} enfileirado após "${campaign.name}"`)
@@ -915,6 +942,12 @@ async function remarketingTick(): Promise<void> {
 
                   const contactLike: ContactLike = { name: lead.name, phone: lead.number }
                   const phone = normalizePhone(lead.number)
+
+                  // Global rate limiter: yield if campaign tick sent from this instance recently
+                  if (!tryAcquireSendSlot(config.userId, config.minDelaySec * 1000)) {
+                    log("⏳", `Remarketing: instância ${config.userId} enviou recentemente — adiando (próximo tick)`)
+                    continue
+                  }
 
                   let sendError: string | null = null
                   try {
