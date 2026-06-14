@@ -93,6 +93,14 @@ type CampaignData = {
   maxSendsPerDay: number
   forceDispatch: boolean
   enableRemarketing: boolean
+  rmktScripts: { templateId: string }[]
+  rmktIntervalMinutes: number
+  rmktWindowStart: string
+  rmktWindowEnd: string
+  rmktAllowedDays: string
+  rmktMinDelaySec: number
+  rmktMaxDelaySec: number
+  rmktMaxPerDay: number
   scheduleRules: ScheduleRule[]
   vendedor: { nome: string; userId: string }
   list: { name: string; _count: { items: number } } | null
@@ -170,6 +178,30 @@ function fmtEstimateDate(iso: string): string {
   const wd = d.toLocaleDateString("pt-BR", { weekday: "short" }).replace(".", "")
   const dt = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })
   return `${wd} ${dt} às ${time}`
+}
+
+function fmtInterval(minutes: number): string {
+  if (minutes >= 10080 && minutes % 10080 === 0) {
+    const n = minutes / 10080
+    return `a cada ${n === 1 ? "1 semana" : `${n} semanas`}`
+  }
+  if (minutes >= 1440 && minutes % 1440 === 0) {
+    const n = minutes / 1440
+    return `a cada ${n === 1 ? "1 dia" : `${n} dias`}`
+  }
+  if (minutes >= 60 && minutes % 60 === 0) {
+    const n = minutes / 60
+    return `a cada ${n === 1 ? "1 hora" : `${n} horas`}`
+  }
+  return `a cada ${minutes}min`
+}
+
+const DAY_LABELS: Record<string, string> = {
+  "1": "Seg", "2": "Ter", "3": "Qua", "4": "Qui", "5": "Sex", "6": "Sáb", "7": "Dom",
+}
+
+function fmtAllowedDays(csv: string): string {
+  return csv.split(",").filter(Boolean).map((d) => DAY_LABELS[d] ?? d).join(", ")
 }
 
 function parseFailureReason(raw: string | null): string {
@@ -817,7 +849,24 @@ const RMKT_STATUS: Record<string, { label: string; cls: string }> = {
   stop_by_admin: { label: "Parado",      cls: "text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-white/5" },
 }
 
-function RemarketingSection({ campaignId, isRunning }: { campaignId: string; isRunning: boolean }) {
+type RmktConfig = {
+  scripts: { templateId: string }[]
+  intervalMinutes: number
+  windowStart: string
+  windowEnd: string
+  allowedDays: string
+  maxPerDay: number
+}
+
+function RemarketingSection({
+  campaignId,
+  isRunning,
+  config,
+}: {
+  campaignId: string
+  isRunning: boolean
+  config: RmktConfig
+}) {
   const [leads, setLeads] = useState<RmktLead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
@@ -840,7 +889,6 @@ function RemarketingSection({ campaignId, isRunning }: { campaignId: string; isR
 
   useEffect(() => { fetchLeads() }, [fetchLeads])
 
-  // Poll every 30s while running
   useEffect(() => {
     if (!isRunning) return
     const id = setInterval(fetchLeads, 30_000)
@@ -853,32 +901,54 @@ function RemarketingSection({ campaignId, isRunning }: { campaignId: string; isR
   return (
     <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 dark:border-white/[0.04]">
-        <div className="flex items-center gap-2.5">
-          <Repeat className="w-4 h-4 text-violet-500" />
-          <span className="font-semibold text-sm text-slate-900 dark:text-white">Follow-up automático</span>
-          {leads.length > 0 && (
-            <span className="text-xs text-slate-400">({leads.length} contato{leads.length !== 1 ? "s" : ""})</span>
-          )}
+      <div className="px-5 py-4 border-b border-slate-100 dark:border-white/[0.04] space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <Repeat className="w-4 h-4 text-violet-500" />
+            <span className="font-semibold text-sm text-slate-900 dark:text-white">Follow-up automático</span>
+            {leads.length > 0 && (
+              <span className="text-xs text-slate-400">({leads.length} contato{leads.length !== 1 ? "s" : ""})</span>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            {pending > 0 && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                {pending} aguardando
+              </span>
+            )}
+            {replied > 0 && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                <MessageCircle className="w-3 h-3" />
+                {replied} responderam
+              </span>
+            )}
+            <button
+              onClick={fetchLeads}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          {pending > 0 && (
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
-              {pending} aguardando
+        {/* Config summary chips */}
+        <div className="flex flex-wrap gap-1.5">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            {config.scripts.length} script{config.scripts.length !== 1 ? "s" : ""}
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            {fmtInterval(config.intervalMinutes)}
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            {config.windowStart}–{config.windowEnd}
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            {fmtAllowedDays(config.allowedDays)}
+          </span>
+          {config.maxPerDay > 0 && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+              máx {config.maxPerDay}/dia
             </span>
           )}
-          {replied > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-              <MessageCircle className="w-3 h-3" />
-              {replied} responderam
-            </span>
-          )}
-          <button
-            onClick={fetchLeads}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
         </div>
       </div>
 
@@ -927,7 +997,7 @@ function RemarketingSection({ campaignId, isRunning }: { campaignId: string; isR
                     </td>
                     <td className="px-5 py-3 hidden sm:table-cell">
                       <span className={`text-xs ${isPast ? "text-violet-500 dark:text-violet-400 font-semibold" : "text-slate-400"}`}>
-                        {isPast ? "Enviando em breve..." : new Date(lead.nextRun).toLocaleString("pt-BR")}
+                        {isPast ? "Enviando em breve..." : fmtTime(lead.nextRun)}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -1381,7 +1451,18 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
 
       {/* ── Follow-up / Remarketing section ──────────────────────────────── */}
       {data.enableRemarketing && (
-        <RemarketingSection campaignId={initial.id} isRunning={isRunning} />
+        <RemarketingSection
+          campaignId={initial.id}
+          isRunning={isRunning}
+          config={{
+            scripts: data.rmktScripts,
+            intervalMinutes: data.rmktIntervalMinutes,
+            windowStart: data.rmktWindowStart,
+            windowEnd: data.rmktWindowEnd,
+            allowedDays: data.rmktAllowedDays,
+            maxPerDay: data.rmktMaxPerDay,
+          }}
+        />
       )}
     </div>
   )

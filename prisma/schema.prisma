@@ -84,7 +84,16 @@ model Campaign {
   status            CampaignStatus         @default(DRAFT)
   minDelay          Int                    @default(10)  // segundos
   maxDelay          Int                    @default(30)  // segundos
-  enableRemarketing Boolean                @default(false)
+  enableRemarketing   Boolean  @default(false)
+  rmktScripts         Json     @default("[]")    // [{ templateId: string }]
+  rmktIntervalMinutes Int      @default(1440)    // minutos entre follow-ups
+  rmktMaxFollowUps    Int      @default(3)       // máx follow-ups por lead
+  rmktWindowStart     String   @default("09:00") // janela diária de envio
+  rmktWindowEnd       String   @default("18:00")
+  rmktAllowedDays     String   @default("1,2,3,4,5") // CSV: 1=Seg … 7=Dom
+  rmktMinDelaySec     Int      @default(15)      // anti-ban
+  rmktMaxDelaySec     Int      @default(45)
+  rmktMaxPerDay       Int      @default(0)       // 0 = sem limite diário
   maxSendsPerDay    Int                    @default(0)   // 0 = sem limite diário
   forceDispatch     Boolean                @default(false) // ignora janela de horário enquanto ativo
   createdAt         DateTime               @default(now())

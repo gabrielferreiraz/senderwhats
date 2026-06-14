@@ -28,7 +28,7 @@ import {
 import { parsePhones } from "@/lib/phone"
 import { DelayRangeSlider } from "./DelayRangeSlider"
 import { ScheduleRuleBuilder, ScheduleRule, flattenRules } from "./ScheduleRuleBuilder"
-import { RemarketingQuickModal, type RemarketingQuickConfig } from "./RemarketingQuickModal"
+import { IntervalPicker } from "./IntervalPicker"
 
 type Vendedor = { id: string; nome: string; userId: string }
 type ContactList = { id: string; name: string; _count: { items: number } }
@@ -48,9 +48,27 @@ type InitialData = {
   minDelay: number
   maxDelay: number
   enableRemarketing: boolean
+  rmktScripts: { templateId: string }[]
+  rmktIntervalMinutes: number
+  rmktWindowStart: string
+  rmktWindowEnd: string
+  rmktAllowedDays: string
+  rmktMinDelaySec: number
+  rmktMaxDelaySec: number
+  rmktMaxPerDay: number
   maxSendsPerDay: number
   scheduleRules: ScheduleRule[]
 }
+
+const DAY_OPTIONS = [
+  { value: "1", label: "Seg" },
+  { value: "2", label: "Ter" },
+  { value: "3", label: "Qua" },
+  { value: "4", label: "Qui" },
+  { value: "5", label: "Sex" },
+  { value: "6", label: "Sáb" },
+  { value: "7", label: "Dom" },
+]
 
 type Props = {
   vendedores: Vendedor[]
@@ -169,9 +187,17 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     initialData ? [initialData.minDelay, initialData.maxDelay] : [15, 45]
   )
   const [enableRemarketing, setEnableRemarketing] = useState(() => initialData?.enableRemarketing ?? false)
+  const [rmktScripts, setRmktScripts] = useState<{ templateId: string }[]>(() => initialData?.rmktScripts ?? [])
+  const [rmktIntervalMinutes, setRmktIntervalMinutes] = useState(() => initialData?.rmktIntervalMinutes ?? 1440)
+  const [rmktWindowStart, setRmktWindowStart] = useState(() => initialData?.rmktWindowStart ?? "09:00")
+  const [rmktWindowEnd, setRmktWindowEnd] = useState(() => initialData?.rmktWindowEnd ?? "18:00")
+  const [rmktAllowedDays, setRmktAllowedDays] = useState(() => initialData?.rmktAllowedDays ?? "1,2,3,4,5")
+  const [rmktDelay, setRmktDelay] = useState<[number, number]>(() => [
+    initialData?.rmktMinDelaySec ?? 15,
+    initialData?.rmktMaxDelaySec ?? 45,
+  ])
+  const [rmktMaxPerDay, setRmktMaxPerDay] = useState(() => initialData?.rmktMaxPerDay ?? 0)
   const [maxSendsPerDay, setMaxSendsPerDay] = useState(() => initialData?.maxSendsPerDay ?? 0)
-  const [remarketingConfig, setRemarketingConfig] = useState<RemarketingQuickConfig | null>(null)
-  const [showRemarketingModal, setShowRemarketingModal] = useState(false)
   const [rules, setRules] = useState<ScheduleRule[]>(() => initialData?.scheduleRules ?? [])
   const [dispatchMode, setDispatchMode] = useState<DispatchMode>("now")
   const [schedDate, setSchedDate] = useState("")
@@ -203,7 +229,16 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       }
       if (Array.isArray(d.rules)) setRules(d.rules as ScheduleRule[])
       if (typeof d.enableRemarketing === "boolean") setEnableRemarketing(d.enableRemarketing)
-      if (typeof d.maxSendsPerDay === "number") setMaxSendsPerDay(d.maxSendsPerDay)
+      if (Array.isArray(d.rmktScripts)) setRmktScripts(d.rmktScripts as { templateId: string }[])
+      if (typeof d.rmktIntervalMinutes === "number") setRmktIntervalMinutes(d.rmktIntervalMinutes as number)
+      if (typeof d.rmktWindowStart === "string") setRmktWindowStart(d.rmktWindowStart as string)
+      if (typeof d.rmktWindowEnd === "string") setRmktWindowEnd(d.rmktWindowEnd as string)
+      if (typeof d.rmktAllowedDays === "string") setRmktAllowedDays(d.rmktAllowedDays as string)
+      if (Array.isArray(d.rmktDelay) && (d.rmktDelay as unknown[]).length === 2) {
+        setRmktDelay([Number((d.rmktDelay as unknown[])[0]) || 15, Number((d.rmktDelay as unknown[])[1]) || 45])
+      }
+      if (typeof d.rmktMaxPerDay === "number") setRmktMaxPerDay(d.rmktMaxPerDay as number)
+      if (typeof d.maxSendsPerDay === "number") setMaxSendsPerDay(d.maxSendsPerDay as number)
       if (d.dispatchMode === "scheduled") setDispatchMode("scheduled")
       if (typeof d.schedDate === "string") setSchedDate(d.schedDate as string)
       if (typeof d.schedTime === "string") setSchedTime(d.schedTime as string)
@@ -212,40 +247,10 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     }
     // Autosave: skip if nothing meaningful has been entered
     if (!name) { clearDraft(); return }
-    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime })
+    writeDraft({ name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktDelay, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime })
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime])
+  }, [name, vendedorId, contactMode, listId, manualNumbers, abTemplates, customMessage, delay, enableRemarketing, rmktScripts, rmktIntervalMinutes, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktDelay, rmktMaxPerDay, maxSendsPerDay, rules, dispatchMode, schedDate, schedTime])
 
-  // Reset remarketing config when vendedor changes — prevents stale config being posted to the wrong userId
-  const vendedorIdMountedRef = useRef(vendedorId)
-  useEffect(() => {
-    if (vendedorId === vendedorIdMountedRef.current) return
-    vendedorIdMountedRef.current = vendedorId
-    setRemarketingConfig(null)
-  }, [vendedorId])
-
-  // In edit mode, load the existing remarketing config so the summary banner and validation reflect reality
-  useEffect(() => {
-    if (!isEdit || !initialData?.enableRemarketing) return
-    const vendedor = vendedores.find((v) => v.id === (initialData?.vendedorId ?? ""))
-    if (!vendedor) return
-    fetch(`/api/remarketing/config/${vendedor.userId}`)
-      .then((r) => r.json())
-      .then((data: { scripts?: { templateId: string }[]; intervalMinutes?: number; maxPerDay?: number; allowedDays?: string; minDelaySec?: number; maxDelaySec?: number }) => {
-        if (Array.isArray(data.scripts) && data.scripts.length > 0) {
-          setRemarketingConfig({
-            scripts: data.scripts,
-            intervalMinutes: data.intervalMinutes ?? 1440,
-            maxPerDay: data.maxPerDay ?? 0,
-            allowedDays: data.allowedDays ?? "1,2,3,4,5",
-            minDelaySec: data.minDelaySec ?? 15,
-            maxDelaySec: data.maxDelaySec ?? 45,
-          })
-        }
-      })
-      .catch(() => {})
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const discardDraft = () => {
     clearDraft()
@@ -259,8 +264,14 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     setCustomMessage("")
     setDelay([15, 45])
     setEnableRemarketing(false)
+    setRmktScripts([])
+    setRmktIntervalMinutes(1440)
+    setRmktWindowStart("09:00")
+    setRmktWindowEnd("18:00")
+    setRmktAllowedDays("1,2,3,4,5")
+    setRmktDelay([15, 45])
+    setRmktMaxPerDay(0)
     setMaxSendsPerDay(0)
-    setRemarketingConfig(null)
     setRules([])
     setDispatchMode("now")
     setSchedDate("")
@@ -291,6 +302,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
 
   const scheduledAt = schedDate && schedTime ? new Date(`${schedDate}T${schedTime}`) : null
   const schedIsPast = scheduledAt !== null && scheduledAt <= new Date()
+  const windowInvalid = enableRemarketing && rmktWindowStart >= rmktWindowEnd
 
   const submit = async (mode: "draft" | "start" | "schedule") => {
     setError("")
@@ -308,8 +320,12 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       setError("A soma dos pesos deve ser exatamente 100%.")
       return
     }
-    if (enableRemarketing && (!remarketingConfig || remarketingConfig.scripts.length === 0)) {
-      setError("Configure o remarketing antes de ativar. Clique no botão 'Configurar' ao lado do toggle.")
+    if (enableRemarketing && rmktScripts.filter((s) => s.templateId).length === 0) {
+      setError("Adicione pelo menos um script de follow-up no remarketing.")
+      return
+    }
+    if (windowInvalid) {
+      setError("O horário de início do follow-up deve ser anterior ao horário de fim.")
       return
     }
     if (mode === "schedule") {
@@ -337,20 +353,20 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
             maxDelay: delay[1],
             maxSendsPerDay,
             enableRemarketing,
+            rmktScripts: rmktScripts.filter((s) => s.templateId),
+            rmktIntervalMinutes,
+            rmktMaxFollowUps: rmktScripts.filter((s) => s.templateId).length,
+            rmktWindowStart,
+            rmktWindowEnd,
+            rmktAllowedDays,
+            rmktMinDelaySec: rmktDelay[0],
+            rmktMaxDelaySec: rmktDelay[1],
+            rmktMaxPerDay,
             scheduleRules: flattenRules(rules),
           }),
         })
         const putData: { ok?: boolean; error?: string } = await putRes.json()
         if (!putRes.ok) { setError(putData.error ?? "Erro ao salvar campanha."); return }
-
-        // Persist remarketing config changes made via the quick modal in edit mode
-        if (enableRemarketing && remarketingConfig && selectedVendedor) {
-          await fetch(`/api/remarketing/config/${selectedVendedor.userId}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ ...remarketingConfig, enabled: true }),
-          }).catch(() => {})
-        }
 
         if (mode === "start") {
           const actionRes = await fetch(`/api/campaigns/${campaignId}/action`, {
@@ -392,6 +408,15 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         maxDelay: delay[1],
         maxSendsPerDay,
         enableRemarketing,
+        rmktScripts: rmktScripts.filter((s) => s.templateId),
+        rmktIntervalMinutes,
+        rmktMaxFollowUps: rmktScripts.filter((s) => s.templateId).length,
+        rmktWindowStart,
+        rmktWindowEnd,
+        rmktAllowedDays,
+        rmktMinDelaySec: rmktDelay[0],
+        rmktMaxDelaySec: rmktDelay[1],
+        rmktMaxPerDay,
         scheduleRules: flattenRules(rules),
         ...(contactMode === "list"
           ? { listId: listId || undefined }
@@ -411,15 +436,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
       })
       const data: { id?: string; error?: string } = await res.json()
       if (!res.ok) { setError(data.error ?? "Erro ao criar campanha."); return }
-
-      // Save remarketing config in parallel if configured
-      if (enableRemarketing && remarketingConfig && selectedVendedor) {
-        await fetch(`/api/remarketing/config/${selectedVendedor.userId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...remarketingConfig, enabled: true }),
-        }).catch(() => {})
-      }
 
       clearDraft()
       router.push(mode === "start" ? `/campanhas/${data.id}` : "/campanhas")
@@ -723,108 +739,197 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         <DelayRangeSlider value={delay} onChange={setDelay} />
       </FormSection>
 
-      {/* Section 4: Daily limit + Remarketing */}
+      {/* Section 4: Daily send limit */}
       <FormSection
-        title="Limites e Remarketing"
-        description="Limite diário de disparos e follow-up automático para quem não responder."
+        title="Limites de Envio"
+        description="Número máximo de disparos por dia. Use 0 para enviar sem limite."
       >
-        <div className="space-y-5">
-          {/* Daily send limit */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Limite diário de disparos
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min={0}
-                value={maxSendsPerDay}
-                onChange={(e) => setMaxSendsPerDay(Math.max(0, parseInt(e.target.value) || 0))}
-                className="w-28 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
-              />
-              <span className="text-xs text-slate-500">
-                {maxSendsPerDay === 0 ? "sem limite diário" : "disparos por dia"}
-              </span>
-            </div>
-          </div>
-
-          {/* Remarketing toggle */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                  <Repeat className="w-3.5 h-3.5 text-violet-500" />
-                  Remarketing automático
-                </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Contatos que não responderem entram automaticamente no funil de follow-up.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!enableRemarketing) {
-                    setShowRemarketingModal(true)
-                    setEnableRemarketing(true)
-                  } else {
-                    setEnableRemarketing(false)
-                  }
-                }}
-                className={`relative w-11 h-6 rounded-full transition-colors ${
-                  enableRemarketing ? "bg-violet-600" : "bg-slate-300 dark:bg-white/10"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
-                    enableRemarketing ? "translate-x-5" : ""
-                  }`}
-                />
-              </button>
-            </div>
-
-            {/* Remarketing config summary */}
-            <AnimatePresence>
-              {enableRemarketing && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.15 }}
-                >
-                  <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${
-                    remarketingConfig && remarketingConfig.scripts.length > 0
-                      ? "bg-violet-50 dark:bg-violet-600/10 border-violet-200 dark:border-violet-500/20"
-                      : "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20"
-                  }`}>
-                    <div className="text-xs">
-                      {remarketingConfig && remarketingConfig.scripts.length > 0 ? (
-                        <span className="text-violet-700 dark:text-violet-400 font-medium">
-                          {remarketingConfig.scripts.length} script{remarketingConfig.scripts.length > 1 ? "s" : ""} configurado{remarketingConfig.scripts.length > 1 ? "s" : ""}
-                          {remarketingConfig.maxPerDay > 0 ? ` · Máx ${remarketingConfig.maxPerDay}/dia` : ""}
-                        </span>
-                      ) : (
-                        <span className="text-amber-700 dark:text-amber-400 font-medium">
-                          Configure os scripts de follow-up
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowRemarketingModal(true)}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
-                    >
-                      <Settings2 className="w-3 h-3" />
-                      {remarketingConfig ? "Editar" : "Configurar"}
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+        <div className="flex items-center gap-3">
+          <input
+            type="number"
+            min={0}
+            value={maxSendsPerDay}
+            onChange={(e) => setMaxSendsPerDay(Math.max(0, parseInt(e.target.value) || 0))}
+            className="w-28 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
+          />
+          <span className="text-xs text-slate-500">
+            {maxSendsPerDay === 0 ? "sem limite diário" : "disparos por dia"}
+          </span>
         </div>
       </FormSection>
 
-      {/* Section 5: Schedule windows */}
+      {/* Section 5: Follow-up automático */}
+      <FormSection
+        title="Follow-up Automático"
+        description="Contatos sem resposta entram no funil de follow-up desta campanha."
+      >
+        <div className="space-y-3">
+          {/* Toggle */}
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              Ativar follow-up para esta campanha
+            </p>
+            <button
+              type="button"
+              onClick={() => setEnableRemarketing((v) => !v)}
+              className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                enableRemarketing ? "bg-violet-600" : "bg-slate-300 dark:bg-white/10"
+              }`}
+            >
+              <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${enableRemarketing ? "translate-x-5" : ""}`} />
+            </button>
+          </div>
+
+          {/* Expandable config */}
+          <AnimatePresence>
+            {enableRemarketing && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.18 }}
+                className="overflow-hidden"
+              >
+                <div className="rounded-xl border border-violet-200 dark:border-violet-500/20 bg-violet-50 dark:bg-violet-600/5 p-4 space-y-5">
+
+                  {/* Scripts */}
+                  <div className="space-y-2">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Scripts de follow-up (em ordem)</p>
+                    {rmktScripts.length === 0 && (
+                      <p className="text-[11px] text-slate-400 dark:text-slate-500 italic">Nenhum script adicionado — o follow-up não será enviado.</p>
+                    )}
+                    {rmktScripts.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono text-slate-400 w-4 text-right shrink-0">{i + 1}</span>
+                        <div className="relative flex-1">
+                          <select
+                            value={s.templateId}
+                            onChange={(e) => setRmktScripts((prev) => prev.map((x, j) => j === i ? { templateId: e.target.value } : x))}
+                            className="w-full appearance-none bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-lg py-2 pl-3 pr-8 text-xs text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all"
+                          >
+                            <option value="">Selecionar script…</option>
+                            {templates.map((t) => (
+                              <option key={t.id} value={t.id}>{t.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setRmktScripts((prev) => prev.filter((_, j) => j !== i))}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setRmktScripts((prev) => [...prev, { templateId: "" }])}
+                      className="flex items-center gap-1.5 text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 dark:hover:text-violet-300 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      Adicionar script
+                    </button>
+                  </div>
+
+                  {/* Interval */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Intervalo entre follow-ups</p>
+                    <IntervalPicker value={rmktIntervalMinutes} onChange={setRmktIntervalMinutes} />
+                  </div>
+
+                  {/* Days */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Dias de envio</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {DAY_OPTIONS.map(({ value, label }) => {
+                        const active = rmktAllowedDays.split(",").includes(value)
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => {
+                              const days = rmktAllowedDays.split(",").filter(Boolean)
+                              const next = active ? days.filter((d) => d !== value) : [...days, value].sort()
+                              if (next.length > 0) setRmktAllowedDays(next.join(","))
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-colors ${
+                              active
+                                ? "bg-violet-600 text-white"
+                                : "bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] text-slate-500 hover:border-violet-300 dark:hover:border-violet-500/40"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Window */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Janela de horário</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-slate-400">Início</p>
+                        <input
+                          type="time"
+                          value={rmktWindowStart}
+                          onChange={(e) => setRmktWindowStart(e.target.value)}
+                          className="w-full bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all [color-scheme:dark]"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-[10px] text-slate-400">Fim</p>
+                        <input
+                          type="time"
+                          value={rmktWindowEnd}
+                          onChange={(e) => setRmktWindowEnd(e.target.value)}
+                          className={`w-full bg-white dark:bg-white/[0.04] border rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none transition-all [color-scheme:dark] ${
+                            windowInvalid
+                              ? "border-amber-400 dark:border-amber-500/60 focus:border-amber-400"
+                              : "border-slate-200 dark:border-white/[0.06] focus:border-violet-500/40"
+                          }`}
+                        />
+                      </div>
+                      {windowInvalid && (
+                        <div className="col-span-2 flex items-center gap-1.5 text-[11px] text-amber-600 dark:text-amber-400">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          O horário de início deve ser anterior ao horário de fim.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Anti-ban delay */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Delay anti-ban entre leads</p>
+                    <DelayRangeSlider value={rmktDelay} onChange={setRmktDelay} min={5} max={300} />
+                  </div>
+
+                  {/* Max per day */}
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      min={0}
+                      value={rmktMaxPerDay}
+                      onChange={(e) => setRmktMaxPerDay(Math.max(0, parseInt(e.target.value) || 0))}
+                      className="w-24 bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center tabular-nums"
+                    />
+                    <span className="text-xs text-slate-500">
+                      {rmktMaxPerDay === 0 ? "follow-ups por dia (sem limite)" : "follow-ups por dia"}
+                    </span>
+                  </div>
+
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </FormSection>
+
+      {/* Section 6: Schedule windows */}
       <FormSection
         title="Janelas de Envio"
         description="Restrinja os disparos a horários e dias específicos. Sem regras, o worker dispara 24h."
@@ -832,7 +937,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         <ScheduleRuleBuilder value={rules} onChange={setRules} />
       </FormSection>
 
-      {/* Section 6: Programação (Enviar Agora vs Agendar) */}
+      {/* Section 7: Programação (Enviar Agora vs Agendar) */}
       <FormSection
         title="Programação"
         description="Inicie imediatamente ou defina uma data e hora de início automático."
@@ -971,23 +1076,6 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         )}
       </div>
 
-      {/* Remarketing quick config modal */}
-      <AnimatePresence>
-        {showRemarketingModal && (
-          <RemarketingQuickModal
-            templates={templates}
-            vendedorUserId={selectedVendedor?.userId ?? ""}
-            onSave={(cfg) => {
-              setRemarketingConfig(cfg)
-              setShowRemarketingModal(false)
-            }}
-            onClose={() => {
-              setShowRemarketingModal(false)
-              if (!remarketingConfig) setEnableRemarketing(false)
-            }}
-          />
-        )}
-      </AnimatePresence>
     </div>
   )
 }

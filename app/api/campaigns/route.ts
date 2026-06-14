@@ -63,6 +63,15 @@ export async function POST(req: NextRequest) {
     minDelay: number
     maxDelay: number
     enableRemarketing?: boolean
+    rmktScripts?: { templateId: string }[]
+    rmktIntervalMinutes?: number
+    rmktMaxFollowUps?: number
+    rmktWindowStart?: string
+    rmktWindowEnd?: string
+    rmktAllowedDays?: string
+    rmktMinDelaySec?: number
+    rmktMaxDelaySec?: number
+    rmktMaxPerDay?: number
     maxSendsPerDay?: number
     autoStart?: boolean
     scheduleRules?: {
@@ -78,8 +87,24 @@ export async function POST(req: NextRequest) {
     name, vendedorId, listId, manualNumbers,
     customMessage, scheduledAt,
     minDelay, maxDelay, enableRemarketing, maxSendsPerDay,
+    rmktScripts, rmktIntervalMinutes, rmktMaxFollowUps,
+    rmktWindowStart, rmktWindowEnd, rmktAllowedDays,
+    rmktMinDelaySec, rmktMaxDelaySec, rmktMaxPerDay,
     autoStart, scheduleRules,
   } = body
+
+  const rmktData = {
+    ...(enableRemarketing !== undefined && { enableRemarketing }),
+    ...(rmktScripts        !== undefined && { rmktScripts: rmktScripts as object }),
+    ...(rmktIntervalMinutes !== undefined && { rmktIntervalMinutes }),
+    ...(rmktMaxFollowUps   !== undefined && { rmktMaxFollowUps }),
+    ...(rmktWindowStart    !== undefined && { rmktWindowStart }),
+    ...(rmktWindowEnd      !== undefined && { rmktWindowEnd }),
+    ...(rmktAllowedDays    !== undefined && { rmktAllowedDays }),
+    ...(rmktMinDelaySec    !== undefined && { rmktMinDelaySec }),
+    ...(rmktMaxDelaySec    !== undefined && { rmktMaxDelaySec }),
+    ...(rmktMaxPerDay      !== undefined && { rmktMaxPerDay }),
+  }
 
   if (!name?.trim() || !vendedorId) {
     return NextResponse.json({ error: "Nome e vendedor são obrigatórios" }, { status: 400 })
@@ -148,9 +173,9 @@ export async function POST(req: NextRequest) {
           scheduledAt: scheduledDate,
           minDelay: minDelay ?? 10,
           maxDelay: maxDelay ?? 30,
-          enableRemarketing: enableRemarketing ?? false,
           maxSendsPerDay: maxSendsPerDay ?? 0,
           status,
+          ...rmktData,
         },
       })
 
@@ -205,6 +230,7 @@ export async function POST(req: NextRequest) {
         minDelay: minDelay ?? 10,
         maxDelay: maxDelay ?? 30,
         status,
+        ...rmktData,
       },
     })
 

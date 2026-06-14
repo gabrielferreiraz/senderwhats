@@ -136,6 +136,15 @@ export async function PUT(
     minDelay?: number
     maxDelay?: number
     enableRemarketing?: boolean
+    rmktScripts?: { templateId: string }[]
+    rmktIntervalMinutes?: number
+    rmktMaxFollowUps?: number
+    rmktWindowStart?: string
+    rmktWindowEnd?: string
+    rmktAllowedDays?: string
+    rmktMinDelaySec?: number
+    rmktMaxDelaySec?: number
+    rmktMaxPerDay?: number
     maxSendsPerDay?: number
     scheduleRules?: {
       dayOfWeek: number
@@ -148,7 +157,8 @@ export async function PUT(
 
   // ── Full edit (from edit page, DRAFT campaigns only) ───────────────────────
   if (body.fullEdit) {
-    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, enableRemarketing, maxSendsPerDay, scheduleRules } = body
+    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, enableRemarketing, maxSendsPerDay, scheduleRules,
+      rmktScripts, rmktIntervalMinutes, rmktMaxFollowUps, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktMinDelaySec, rmktMaxDelaySec, rmktMaxPerDay } = body
 
     if (!name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
     if (!vendedorId)   return NextResponse.json({ error: "Vendedor é obrigatório" }, { status: 400 })
@@ -178,8 +188,17 @@ export async function PUT(
           customMessage: customMessage?.trim() || null,
           minDelay: minDelay ?? 10,
           maxDelay: maxDelay ?? 30,
-          ...(enableRemarketing !== undefined && { enableRemarketing }),
-          ...(maxSendsPerDay !== undefined && { maxSendsPerDay }),
+          ...(enableRemarketing    !== undefined && { enableRemarketing }),
+          ...(maxSendsPerDay      !== undefined && { maxSendsPerDay }),
+          ...(rmktScripts         !== undefined && { rmktScripts: rmktScripts as object }),
+          ...(rmktIntervalMinutes !== undefined && { rmktIntervalMinutes }),
+          ...(rmktMaxFollowUps    !== undefined && { rmktMaxFollowUps }),
+          ...(rmktWindowStart     !== undefined && { rmktWindowStart }),
+          ...(rmktWindowEnd       !== undefined && { rmktWindowEnd }),
+          ...(rmktAllowedDays     !== undefined && { rmktAllowedDays }),
+          ...(rmktMinDelaySec     !== undefined && { rmktMinDelaySec }),
+          ...(rmktMaxDelaySec     !== undefined && { rmktMaxDelaySec }),
+          ...(rmktMaxPerDay       !== undefined && { rmktMaxPerDay }),
         },
       })
       await tx.campaignScheduleRule.deleteMany({ where: { campaignId: id } })
