@@ -818,6 +818,9 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const [activeTab, setActiveTab] = useState<Tab>("queue")
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const instancePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [statusToast, setStatusToast] = useState<{ type: "force_off" | "disconnected"; key: number } | null>(null)
+  const prevForceDispatch = useRef<boolean | null>(null)
+  const prevInstanceState = useRef<string | null>(null)
 
   const fetchData = useCallback(async () => {
     try {
@@ -859,6 +862,29 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     instancePollRef.current = setInterval(check, 15000)
     return () => { clearInterval(instancePollRef.current!) }
   }, [data.vendedor.userId])
+
+  // Toast: detect forceDispatch going true → false
+  useEffect(() => {
+    if (prevForceDispatch.current === true && data.forceDispatch === false) {
+      setStatusToast({ type: "force_off", key: Date.now() })
+    }
+    prevForceDispatch.current = data.forceDispatch
+  }, [data.forceDispatch])
+
+  // Toast: detect instance going open → close
+  useEffect(() => {
+    if (prevInstanceState.current === "open" && instanceState === "close") {
+      setStatusToast({ type: "disconnected", key: Date.now() })
+    }
+    prevInstanceState.current = instanceState
+  }, [instanceState])
+
+  // Auto-dismiss toast after 4.5s
+  useEffect(() => {
+    if (!statusToast) return
+    const id = setTimeout(() => setStatusToast(null), 4500)
+    return () => clearTimeout(id)
+  }, [statusToast?.key])
 
   const sendNow = useCallback(async (messageId: string) => {
     await fetch(`/api/campaign-messages/${messageId}/send-now`, { method: "POST" })
@@ -904,6 +930,32 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
+      {/* ── Status Toast (transient, fixed top-right) ──────────────────────── */}
+      <AnimatePresence>
+        {statusToast && (
+          <motion.div
+            key={statusToast.key}
+            initial={{ opacity: 0, y: -20, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
+            transition={{ duration: 0.22 }}
+            className={`fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium max-w-sm ${
+              statusToast.type === "disconnected"
+                ? "bg-rose-50 dark:bg-[#1a0a0a] border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400"
+                : "bg-amber-50 dark:bg-[#1a1200] border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400"
+            }`}
+          >
+            {statusToast.type === "disconnected"
+              ? <WifiOff className="w-4 h-4 shrink-0" />
+              : <ZapOff className="w-4 h-4 shrink-0" />}
+            <span>
+              {statusToast.type === "disconnected"
+                ? "Instância desconectada — disparos pausados"
+                : "Forçamento desligado — aguardando janela"}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         {/* Left: back + title */}
@@ -1109,8 +1161,11 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
       )}
 
       {/* ── Next Send countdown ──────────────────────────────────────────── */}
+      {/* Only show when the worker can actually dispatch:
+          in-window, OR force dispatch active, OR no schedule rules (24/7) */}
       <AnimatePresence>
-        {isRunning && data.nextPending && (
+        {isRunning && data.nextPending &&
+          (data.estimate?.inWindow || data.forceDispatch || data.scheduleRules.length === 0) && (
           <NextSendCard
             key={data.nextPending.id}
             nextPending={data.nextPending}
