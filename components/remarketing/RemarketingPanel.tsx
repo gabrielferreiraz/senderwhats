@@ -8,6 +8,7 @@ import {
   MessageCircle, TrendingUp,
 } from "lucide-react"
 import { DelayRangeSlider } from "@/components/campanhas/DelayRangeSlider"
+import { IntervalPicker } from "@/components/campanhas/IntervalPicker"
 
 type Template = { id: string; name: string }
 type Vendedor = { id: string; nome: string; userId: string }
@@ -300,20 +301,10 @@ export function RemarketingPanel({ templates, vendedores }: Props) {
                     />
                   </FieldGroup>
                   <FieldGroup label="Intervalo entre follow-ups do mesmo contato" icon={<Clock className="w-3.5 h-3.5" />}>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={30}
-                        step={30}
-                        value={config.intervalMinutes}
-                        onChange={(e) => setConfig((c) => ({ ...c, intervalMinutes: Number(e.target.value) }))}
-                        className="field-input flex-1"
-                      />
-                      <span className="text-xs text-slate-400 shrink-0">min</span>
-                      <span className="text-xs text-slate-400 shrink-0">
-                        ({Math.round(config.intervalMinutes / 60 * 10) / 10}h)
-                      </span>
-                    </div>
+                    <IntervalPicker
+                      value={config.intervalMinutes}
+                      onChange={(mins) => setConfig((c) => ({ ...c, intervalMinutes: mins }))}
+                    />
                   </FieldGroup>
                 </div>
 

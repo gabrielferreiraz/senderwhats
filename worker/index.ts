@@ -488,7 +488,7 @@ async function tick(): Promise<void> {
           log("📵", `Instância "${userId}" desconectada [${reason}] — pausando "${campaign.name}"`)
           await prisma.campaign.update({
             where: { id: campaign.id },
-            data: { status: "PAUSED" },
+            data: { status: "PAUSED", forceDispatch: false },
           }).catch((err: unknown) => {
             log("⚠️", `Erro ao pausar "${campaign.name}" por desconexão: ${errMsg(err)}`)
           })
@@ -498,7 +498,21 @@ async function tick(): Promise<void> {
 
         // ── Schedule window check (Brasília time, midnight-crossing safe) ────
         if (!isInWindow(campaign.scheduleRules, day, hhmm)) {
-          if (!campaign.forceDispatch) {
+          // Re-read forceDispatch directly from DB — avoids stale Prisma client
+          // cache if the worker was started before prisma generate ran.
+          let forceDispatch = campaign.forceDispatch
+          if (forceDispatch === undefined || forceDispatch === null) {
+            try {
+              const fresh = await prisma.campaign.findUnique({
+                where: { id: campaign.id },
+                select: { forceDispatch: true },
+              })
+              forceDispatch = fresh?.forceDispatch ?? false
+            } catch {
+              forceDispatch = false
+            }
+          }
+          if (!forceDispatch) {
             log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
             continue
           }

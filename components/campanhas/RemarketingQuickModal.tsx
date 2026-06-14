@@ -6,6 +6,7 @@ import {
   X, Repeat, Layers, Plus, ChevronDown, AlertCircle, CheckCircle2,
 } from "lucide-react"
 import { DelayRangeSlider } from "./DelayRangeSlider"
+import { IntervalPicker } from "./IntervalPicker"
 
 type Template = { id: string; name: string; _count?: { steps: number } }
 
@@ -191,24 +192,12 @@ export function RemarketingQuickModal({ templates, vendedorUserId, onSave, onClo
             {/* Interval between follow-ups */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-                Intervalo entre follow-ups
+                Intervalo entre follow-ups do mesmo contato
               </label>
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  min={60}
-                  step={60}
-                  value={intervalMinutes}
-                  onChange={(e) => setIntervalMinutes(Math.max(60, parseInt(e.target.value) || 1440))}
-                  className="w-24 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
-                />
-                <span className="text-xs text-slate-500">minutos</span>
-                <span className="text-[11px] text-slate-400">
-                  ({intervalMinutes >= 1440
-                    ? `${Math.round(intervalMinutes / 1440)}d`
-                    : `${Math.round(intervalMinutes / 60)}h`})
-                </span>
-              </div>
+              <IntervalPicker
+                value={intervalMinutes}
+                onChange={setIntervalMinutes}
+              />
             </div>
 
             {/* Dias da semana */}

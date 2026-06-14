@@ -167,7 +167,7 @@ export function DashboardClient({ initial, vendedores }: Props) {
           value={data.totalContacts.toLocaleString("pt-BR")}
           Icon={Users}
           iconColor="emerald"
-          sub="Na base de dados"
+          sub={selectedVendor ? `Nas listas de ${selectedVendor.nome}` : "Na base de dados"}
         />
         <StatsCard
           label="Taxa de Sucesso"
