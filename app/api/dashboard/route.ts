@@ -59,9 +59,9 @@ export async function GET(req: NextRequest) {
     prisma.campaignMessage.count({ where: { status: "SENT", sentAt: { gte: rangeStart }, ...msgFilter } }),
     prisma.campaignMessage.count({ where: { status: "FAILED", createdAt: { gte: rangeStart }, ...msgFilter } }),
     prisma.campaign.count({ where: { status: "RUNNING", ...campaignFilter } }),
-    prisma.contact.count(vendedorId ? {
-      where: { listItems: { some: { list: { vendedorId } } } },
-    } : {}),
+    vendedorId
+      ? prisma.contact.count({ where: { listItems: { some: { list: { vendedorId } } } } })
+      : prisma.contact.count(),
     prisma.campaignMessage.findMany({
       where: {
         ...msgFilter,
