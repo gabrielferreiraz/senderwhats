@@ -527,17 +527,28 @@ export function ScriptBuilderPage({ template }: Props) {
     setSavedAt(null)
   }, [])
 
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const res = await fetch(`/api/uploads?type=${encodeURIComponent(file.type)}`, {
+      method: "POST",
+      headers: { "Content-Type": file.type },
+      body: file,
+    })
+    if (!res.ok) {
+      const { error } = await res.json().catch(() => ({ error: "Erro desconhecido" })) as { error: string }
+      console.error("[upload] erro:", error)
+      return null
+    }
+    const { url } = await res.json() as { url: string }
+    return url
+  }
+
   const handleAudioUpload = async (stepId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     setUploadingStepId(stepId)
     try {
-      const fd = new FormData()
-      fd.append("file", file)
-      const res = await fetch("/api/uploads", { method: "POST", body: fd })
-      if (!res.ok) return
-      const { url } = await res.json() as { url: string }
-      updateStep(stepId, { audioUrl: url })
+      const url = await uploadFile(file)
+      if (url) updateStep(stepId, { audioUrl: url })
     } finally {
       setUploadingStepId(null)
       e.target.value = ""
@@ -549,12 +560,8 @@ export function ScriptBuilderPage({ template }: Props) {
     if (!file) return
     setUploadingStepId(stepId)
     try {
-      const fd = new FormData()
-      fd.append("file", file)
-      const res = await fetch("/api/uploads", { method: "POST", body: fd })
-      if (!res.ok) return
-      const { url } = await res.json() as { url: string }
-      updateStep(stepId, { imageUrl: url })
+      const url = await uploadFile(file)
+      if (url) updateStep(stepId, { imageUrl: url })
     } finally {
       setUploadingStepId(null)
       e.target.value = ""

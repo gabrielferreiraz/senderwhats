@@ -18,20 +18,11 @@ const ALLOWED: Record<string, string> = {
   "audio/webm": "webm",
 }
 
+// POST /api/uploads?type=image/png — body é o arquivo em binário puro
 export async function POST(req: NextRequest) {
-  let formData: FormData
-  try {
-    formData = await req.formData()
-  } catch {
-    return NextResponse.json({ error: "Requisição inválida (esperado multipart/form-data)" }, { status: 400 })
-  }
+  const mimeType = req.nextUrl.searchParams.get("type") ?? req.headers.get("content-type") ?? ""
+  const ext = ALLOWED[mimeType.split(";")[0]!.trim()]
 
-  const file = formData.get("file")
-  if (!file || typeof file === "string") {
-    return NextResponse.json({ error: "Campo 'file' não encontrado" }, { status: 400 })
-  }
-
-  const ext = ALLOWED[(file as File).type]
   if (!ext) {
     return NextResponse.json(
       { error: "Formato não suportado. Imagens: JPEG, PNG, GIF, WebP. Áudios: OGG, MP3, WAV, WebM." },
@@ -41,9 +32,14 @@ export async function POST(req: NextRequest) {
 
   let buffer: Buffer
   try {
-    buffer = Buffer.from(await (file as File).arrayBuffer())
-  } catch {
+    buffer = Buffer.from(await req.arrayBuffer())
+  } catch (err) {
+    console.error("[upload] Falha ao ler body:", err)
     return NextResponse.json({ error: "Falha ao ler o arquivo enviado" }, { status: 500 })
+  }
+
+  if (buffer.byteLength === 0) {
+    return NextResponse.json({ error: "Arquivo vazio" }, { status: 400 })
   }
 
   if (buffer.byteLength > MAX_SIZE) {
@@ -55,11 +51,11 @@ export async function POST(req: NextRequest) {
   try {
     mkdirSync(UPLOAD_DIR, { recursive: true })
     writeFileSync(join(UPLOAD_DIR, filename), buffer)
+    console.log("[upload] salvo:", filename, `(${buffer.byteLength} bytes)`)
   } catch (err) {
     console.error("[upload] Falha ao gravar arquivo:", err)
     return NextResponse.json({ error: "Falha ao salvar arquivo no servidor." }, { status: 500 })
   }
 
-  // Servido via /api/uploads/[filename] para garantir funcionamento em produção
   return NextResponse.json({ url: `/api/uploads/${filename}` }, { status: 201 })
 }

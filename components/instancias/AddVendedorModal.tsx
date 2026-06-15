@@ -15,7 +15,6 @@ type Props = {
   onSuccess: (vendedor: { id: string; nome: string; userId: string }) => void
 }
 
-// QR code expires on WhatsApp after ~30s
 const QR_LIFETIME_S = 30
 
 function slugify(text: string): string {
@@ -29,6 +28,13 @@ function slugify(text: string): string {
     .slice(0, 30)
 }
 
+function clearRef(ref: React.MutableRefObject<ReturnType<typeof setInterval> | null>) {
+  if (ref.current !== null) {
+    clearInterval(ref.current)
+    ref.current = null
+  }
+}
+
 export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }: Props) {
   const [step, setStep] = useState<Step>(mode === "reconnect" ? "connecting" : "form")
   const [nome, setNome] = useState(vendedor?.nome ?? "")
@@ -37,7 +43,6 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
   const [formError, setFormError] = useState("")
   const [submitting, setSubmitting] = useState(false)
 
-  // QR state
   const [connState, setConnState] = useState<ConnState>("unknown")
   const [qrBase64, setQrBase64] = useState<string | null>(null)
   const [qrLoading, setQrLoading] = useState(false)
@@ -48,6 +53,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
   const [currentNome, setCurrentNome] = useState(vendedor?.nome ?? "")
 
   const mountedRef = useRef(true)
+  const fetchingQRRef = useRef(false)   // guard contra chamadas concorrentes
   const statusIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const qrIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -62,13 +68,15 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
   }, [nome, userIdManual, mode])
 
   const clearAllIntervals = useCallback(() => {
-    clearInterval(statusIntervalRef.current!)
-    clearInterval(qrIntervalRef.current!)
-    clearInterval(countdownIntervalRef.current!)
-    statusIntervalRef.current = null
-    qrIntervalRef.current = null
-    countdownIntervalRef.current = null
+    clearRef(statusIntervalRef)
+    clearRef(qrIntervalRef)
+    clearRef(countdownIntervalRef)
   }, [])
+
+  const goSuccess = useCallback(() => {
+    clearAllIntervals()
+    setStep("success")
+  }, [clearAllIntervals])
 
   // ── Status polling ───────────────────────────────────────────────────────────
 
@@ -87,68 +95,82 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
   }, [])
 
   // ── QR fetching ──────────────────────────────────────────────────────────────
-  // NOTE: This call may take up to 6s — the route does server-side retry if the
-  //       instance is still warming up after creation.
+
+  const startCountdown = useCallback((uid: string, onExpire: () => void) => {
+    clearRef(countdownIntervalRef)
+    setQrCountdown(QR_LIFETIME_S)
+    countdownIntervalRef.current = setInterval(() => {
+      setQrCountdown((c) => {
+        if (c <= 1) {
+          clearRef(countdownIntervalRef)
+          onExpire()
+          return QR_LIFETIME_S
+        }
+        return c - 1
+      })
+    }, 1000)
+  }, [])
 
   const fetchQR = useCallback(async (uid: string) => {
-    if (!mountedRef.current) return
+    if (!mountedRef.current || fetchingQRRef.current) return
+    fetchingQRRef.current = true
     setQrLoading(true)
     setQrError(null)
     try {
       const res = await fetch(`/api/instances/${uid}/qr`, { cache: "no-store" })
       const data = (await res.json()) as { base64?: string | null; error?: string }
       if (!mountedRef.current) return
+
       if (data.base64) {
         setQrBase64(data.base64)
         setQrError(null)
-        // Reset countdown when new QR arrives
-        clearInterval(countdownIntervalRef.current!)
-        setQrCountdown(QR_LIFETIME_S)
-        countdownIntervalRef.current = setInterval(() => {
-          setQrCountdown((c) => (c <= 1 ? QR_LIFETIME_S : c - 1))
-        }, 1000)
-      } else if (data.error === "qr_not_available") {
-        // Puppeteer still initializing — retry silently after 8s (no error shown)
-        setQrError(null)
-        setTimeout(() => {
+        startCountdown(uid, () => {
           if (mountedRef.current) fetchQR(uid)
-        }, 8000)
-      } else {
-        setQrError("Não foi possível gerar o QR Code.")
+        })
+        return
       }
+
+      if (data.error === "already_connected") {
+        // Servidor confirmou que a sessão já está ativa — avança direto para sucesso
+        goSuccess()
+        return
+      }
+
+      // qr_not_available: Puppeteer ainda inicializando — tenta novamente em 8s
+      setQrError(null)
+      setTimeout(() => {
+        if (mountedRef.current) fetchQR(uid)
+      }, 8_000)
     } catch {
       if (mountedRef.current) setQrError("Falha de comunicação com o servidor WhatsApp.")
     } finally {
+      fetchingQRRef.current = false
       if (mountedRef.current) setQrLoading(false)
     }
-  }, [])
+  }, [goSuccess, startCountdown])
 
-  // ── Orchestrate when in "connecting" step ────────────────────────────────────
+  // ── Orchestrate quando no step "connecting" ──────────────────────────────────
 
   useEffect(() => {
     if (step !== "connecting" || !currentUserId) return
 
     const uid = currentUserId
 
-    // Fetch QR immediately (server handles retry/create internally)
     fetchQR(uid)
 
-    // Re-fetch QR every 30s (QR expiry window)
+    // Re-fetch QR a cada 30s (janela de expiração do QR no WhatsApp)
     qrIntervalRef.current = setInterval(() => {
       if (mountedRef.current) fetchQR(uid)
     }, QR_LIFETIME_S * 1000)
 
-    // Poll connection status every 2s
+    // Poll de status a cada 2s para detectar conexão
     statusIntervalRef.current = setInterval(async () => {
       const st = await fetchStatus(uid)
-      if (st === "open" && mountedRef.current) {
-        clearAllIntervals()
-        setStep("success")
-      }
-    }, 2000)
+      if (st === "open" && mountedRef.current) goSuccess()
+    }, 2_000)
 
     return clearAllIntervals
-  }, [step, currentUserId, fetchQR, fetchStatus, clearAllIntervals])
+  }, [step, currentUserId, fetchQR, fetchStatus, goSuccess, clearAllIntervals])
 
   // ── Success auto-close ───────────────────────────────────────────────────────
 
@@ -375,7 +397,7 @@ export function AddVendedorModal({ mode = "add", vendedor, onClose, onSuccess }:
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
                         <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-400" />
                       </span>
-                      Aguardando conexão
+                      {connState === "open" ? "Conectando..." : "Aguardando conexão"}
                     </div>
 
                     {qrBase64 && !qrLoading && (
