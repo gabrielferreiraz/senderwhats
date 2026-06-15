@@ -1335,27 +1335,53 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
       </AnimatePresence>
 
       {/* ── Summary strip ────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap gap-4 text-xs text-slate-500">
+      <div className="flex flex-wrap gap-1.5">
         {data.list && (
-          <span className="flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" />
+          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            <Users className="w-3 h-3" />
             {data.list.name} · {data.list._count.items.toLocaleString()} contatos
           </span>
         )}
         {data.template && (
-          <span className="flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5" />
+          <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            <Layers className="w-3 h-3" />
             {data.template.name} · {data.template._count.steps} passo{data.template._count.steps !== 1 ? "s" : ""}
           </span>
         )}
-        <span className="flex items-center gap-1.5">
-          <Smartphone className="w-3.5 h-3.5" />
+        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+          <Smartphone className="w-3 h-3" />
           {data.vendedor.nome}
         </span>
-        <span className="flex items-center gap-1.5">
-          <Clock className="w-3.5 h-3.5" />
+        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+          <Clock className="w-3 h-3" />
           Delay: {fmtSec(data.minDelay)} – {fmtSec(data.maxDelay)}
         </span>
+        {data.scheduleRules.length > 0 && (() => {
+          const windows = [...new Set(data.scheduleRules.map((r) => `${r.startTime}–${r.endTime}`))]
+          return windows.length === 1 ? (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+              {windows[0]}
+            </span>
+          ) : (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+              {windows.length} janelas de horário
+            </span>
+          )
+        })()}
+        {data.scheduleRules.length > 0 && (() => {
+          const SCHED_DAY: Record<number, string> = { 0: "Dom", 1: "Seg", 2: "Ter", 3: "Qua", 4: "Qui", 5: "Sex", 6: "Sáb" }
+          const days = [...new Set(data.scheduleRules.map((r) => r.dayOfWeek))].sort((a, b) => a - b)
+          return (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+              {days.map((d) => SCHED_DAY[d] ?? d).join(", ")}
+            </span>
+          )
+        })()}
+        {data.maxSendsPerDay > 0 && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+            máx {data.maxSendsPerDay}/dia
+          </span>
+        )}
       </div>
 
       {/* ── Metrics row ──────────────────────────────────────────────────── */}
