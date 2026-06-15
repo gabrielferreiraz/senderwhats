@@ -176,7 +176,10 @@ async function sendImage(
   imageUrl: string,
   caption: string
 ): Promise<string | null> {
+  console.log("[sendImage] fetchUpload →", `${APP_URL}${imageUrl}`)
   const buffer = await fetchUpload(imageUrl)
+  console.log("[sendImage] buffer OK, bytes:", buffer.byteLength)
+
   const ext = (imageUrl.split(".").pop() ?? "jpg").toLowerCase()
   const mimeType = MIME_MAP[ext] ?? "image/jpeg"
 
@@ -185,12 +188,14 @@ async function sendImage(
   if (caption.trim()) form.append("caption", caption.trim())
   form.append("image", new Blob([buffer], { type: mimeType }), `image.${ext}`)
 
+  console.log("[sendImage] enviando para WhatsApp API →", `${WHATSAPP_BASE}/message/send-image/${userId}`)
   const res = await fetch(`${WHATSAPP_BASE}/message/send-image/${userId}`, {
     method: "POST",
     headers: { ...authHeader() },
     body: form,
     signal: AbortSignal.timeout(70_000),
   })
+  console.log("[sendImage] resposta API:", res.status)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`WhatsApp API → ${res.status}: ${text}`)
