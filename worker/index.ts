@@ -18,8 +18,6 @@ import cron from "node-cron"
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
-import { readFileSync } from "fs"
-import { join } from "path"
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
 // Business timezone: Mato Grosso do Sul (UTC-4), permanently — no DST.
@@ -124,6 +122,9 @@ function applyVariables(template: string, contact: ContactLike): string {
 
 const WHATSAPP_BASE = process.env.WHATSAPP_API_URL ?? "http://localhost:8080"
 const WHATSAPP_API_KEY = process.env.API_KEY ?? ""
+// URL base do próprio app Next.js — usada para baixar uploads via HTTP
+// (o worker e o servidor web podem rodar em containers diferentes)
+const APP_URL = (process.env.SENDERWHATS_URL ?? process.env.APP_URL ?? "http://localhost:3000").replace(/\/$/, "")
 
 function authHeader(): Record<string, string> {
   return WHATSAPP_API_KEY ? { Authorization: `Bearer ${WHATSAPP_API_KEY}` } : {}
@@ -163,14 +164,19 @@ const AUDIO_MIME_MAP: Record<string, string> = {
   webm: "audio/webm",
 }
 
+async function fetchUpload(relativeUrl: string): Promise<ArrayBuffer> {
+  const res = await fetch(`${APP_URL}${relativeUrl}`, { signal: AbortSignal.timeout(30_000) })
+  if (!res.ok) throw new Error(`Upload não encontrado: ${relativeUrl} (HTTP ${res.status})`)
+  return res.arrayBuffer()
+}
+
 async function sendImage(
   userId: string,
   number: string,
   imageUrl: string,
   caption: string
 ): Promise<string | null> {
-  const filePath = join(process.cwd(), "public", imageUrl)
-  const buffer = readFileSync(filePath)
+  const buffer = await fetchUpload(imageUrl)
   const ext = (imageUrl.split(".").pop() ?? "jpg").toLowerCase()
   const mimeType = MIME_MAP[ext] ?? "image/jpeg"
 
@@ -199,8 +205,7 @@ async function sendImage(
 }
 
 async function sendAudio(userId: string, number: string, audioUrl: string): Promise<string | null> {
-  const filePath = join(process.cwd(), "public", audioUrl)
-  const buffer = readFileSync(filePath)
+  const buffer = await fetchUpload(audioUrl)
   const ext = (audioUrl.split(".").pop() ?? "ogg").toLowerCase()
   const mimeType = AUDIO_MIME_MAP[ext] ?? "audio/ogg"
 
