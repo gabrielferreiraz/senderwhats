@@ -376,7 +376,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     setError("")
     if (!name.trim()) { setError("Informe o nome da campanha."); return }
     if (!vendedorId) { setError("Selecione um vendedor."); return }
-    if (contactMode === "manual" && manualCount === 0) {
+    if (contactMode === "manual" && manualCount === 0 && mode !== "draft") {
       setError("Insira pelo menos um número válido.")
       return
     }

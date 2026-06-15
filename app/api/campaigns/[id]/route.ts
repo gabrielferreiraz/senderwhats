@@ -187,9 +187,16 @@ export async function PUT(
       return NextResponse.json({ error: "Só rascunhos podem ser editados" }, { status: 409 })
     }
 
-    const abTemplates = templates?.length ?? 0
-    const campaignTemplateId = abTemplates === 1 ? templates![0]!.id : null
-    const campaignTemplatesJson = abTemplates > 1 ? (templates as object) : Prisma.JsonNull
+    const numTemplates = templates?.length ?? 0
+    const campaignTemplateId = numTemplates === 1 ? templates![0]!.id : null
+    const campaignTemplatesJson = numTemplates > 1 ? (templates as object) : Prisma.JsonNull
+
+    const manualPhones = manualNumbers?.trim() ? parsePhones(manualNumbers) : []
+    const resolvedAbTemplates: AbTemplate[] = numTemplates > 1
+      ? (templates as AbTemplate[])
+      : numTemplates === 1
+        ? [{ id: templates![0]!.id, weight: 100 }]
+        : []
 
     await prisma.$transaction(async (tx) => {
       await tx.campaign.update({
@@ -229,47 +236,32 @@ export async function PUT(
           })),
         })
       }
-    })
 
-    // ── Pré-popular fila com números manuais ─────────────────────────────────
-    if (manualNumbers?.trim()) {
-      const phones = parsePhones(manualNumbers)
-      if (phones.length > 0) {
-        const abTemplates: AbTemplate[] = (() => {
-          if ((templates?.length ?? 0) > 1) return templates as AbTemplate[]
-          if (templates?.length === 1) return [{ id: templates[0]!.id, weight: 100 }]
-          return []
-        })()
-
-        await prisma.$transaction(async (tx) => {
-          // Remove mensagens pendentes anteriores (evita duplicar ao re-salvar)
-          await tx.campaignMessage.deleteMany({ where: { campaignId: id, status: "PENDING" } })
-
-          const contactIds: string[] = []
-          for (const phone of phones) {
-            const contact = await tx.contact.upsert({
-              where: { phone },
-              create: { phone },
-              update: {},
-            })
-            contactIds.push(contact.id)
-          }
-
-          const assignments = assignTemplateIds(contactIds.length, abTemplates)
-          await tx.campaignMessage.createMany({
-            data: contactIds.map((contactId, i) => ({
-              campaignId: id,
-              contactId,
-              currentStep: 1,
-              status: "PENDING",
-              nextSendAt: new Date(),
-              templateId: assignments[i] ?? null,
-            })),
-            skipDuplicates: true,
+      if (manualPhones.length > 0) {
+        await tx.campaignMessage.deleteMany({ where: { campaignId: id, status: "PENDING" } })
+        const contactIds: string[] = []
+        for (const phone of manualPhones) {
+          const contact = await tx.contact.upsert({
+            where: { phone },
+            create: { phone },
+            update: {},
           })
+          contactIds.push(contact.id)
+        }
+        const assignments = assignTemplateIds(contactIds.length, resolvedAbTemplates)
+        await tx.campaignMessage.createMany({
+          data: contactIds.map((contactId, i) => ({
+            campaignId: id,
+            contactId,
+            currentStep: 1,
+            status: "PENDING",
+            nextSendAt: new Date(),
+            templateId: assignments[i] ?? null,
+          })),
+          skipDuplicates: true,
         })
       }
-    }
+    })
 
     return NextResponse.json({ ok: true })
   }
