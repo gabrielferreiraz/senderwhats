@@ -23,7 +23,10 @@ export default async function EditScriptPage({
     name: template.name,
     steps: template.steps.map((s) => ({
       stepOrder: s.stepOrder,
+      stepType: s.stepType,
       body: s.body,
+      imageUrl: s.imageUrl ?? null,
+      audioUrl: s.audioUrl ?? null,
       delayAfter: s.delayAfter,
     })),
   }
