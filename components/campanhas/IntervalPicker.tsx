@@ -13,7 +13,7 @@ const FACTORS: Record<Unit, number> = {
 }
 
 const MIN_DISPLAY: Record<Unit, number> = {
-  minutes: 30,
+  minutes: 1,
   hours: 1,
   days: 1,
   weeks: 1,
