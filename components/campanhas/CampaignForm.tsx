@@ -595,34 +595,32 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
           {/* Contact source: tabs */}
           <div className="space-y-3">
             <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Contatos Alvo</label>
-            {!isEdit && (
-              <div className="flex rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] p-1 gap-1">
-                <button
-                  type="button"
-                  onClick={() => setContactMode("list")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                    contactMode === "list"
-                      ? "bg-violet-600 text-white shadow-md"
-                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <FolderOpen className="w-3.5 h-3.5" />
-                  Selecionar Lista
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setContactMode("manual")}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
-                    contactMode === "manual"
-                      ? "bg-violet-600 text-white shadow-md"
-                      : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                  }`}
-                >
-                  <PenLine className="w-3.5 h-3.5" />
-                  Digitar Números
-                </button>
-              </div>
-            )}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setContactMode("list")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  contactMode === "list"
+                    ? "bg-violet-600 text-white shadow-md"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
+              >
+                <FolderOpen className="w-3.5 h-3.5" />
+                Selecionar Lista
+              </button>
+              <button
+                type="button"
+                onClick={() => setContactMode("manual")}
+                className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-all ${
+                  contactMode === "manual"
+                    ? "bg-violet-600 text-white shadow-md"
+                    : "text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                }`}
+              >
+                <PenLine className="w-3.5 h-3.5" />
+                Digitar Números
+              </button>
+            </div>
 
             <AnimatePresence mode="wait">
               {contactMode === "list" ? (
