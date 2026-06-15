@@ -74,7 +74,17 @@ export async function POST(req: NextRequest) {
   }))
 
   const rawInstanceId = body.userId ?? body.instanceId
-  const from = body.from?.replace(/@[a-z.]+$/i, "") // remove @c.us, @s.whatsapp.net, etc.
+  const rawFrom = body.from ?? ""
+
+  // Ignorar mensagens de grupo (@g.us) e notificações do sistema
+  if (rawFrom.includes("@g.us")) {
+    return NextResponse.json({ ok: true, skipped: "group_message" })
+  }
+  if (body.type === "notification_template" || String(body.body ?? "").startsWith("[notification_template]")) {
+    return NextResponse.json({ ok: true, skipped: "notification_template" })
+  }
+
+  const from = rawFrom.replace(/@[a-z.]+$/i, "") // remove @c.us, @lid, @s.whatsapp.net, etc.
 
   if (!rawInstanceId || !from) {
     console.warn("[webhook/whatsapp] ⚠️ Payload incompleto — userId/instanceId ou from ausente")
