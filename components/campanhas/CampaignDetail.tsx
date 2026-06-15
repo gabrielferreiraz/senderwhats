@@ -27,6 +27,8 @@ import {
   ZapOff,
   Repeat,
   MessageCircle,
+  PackageCheck,
+  Eye,
 } from "lucide-react"
 import type { ScheduleEstimate } from "@/lib/campaign-estimate"
 
@@ -41,6 +43,8 @@ type Counts = {
   sent: number
   failed: number
   completed: number
+  delivered: number
+  read: number
 }
 
 type QueueMessage = {
@@ -698,9 +702,11 @@ function TabbedLogPanel({
 
 function ScheduleWindowBanner({
   nextWindowStart,
+  nextWindowStartTime,
   forced,
 }: {
   nextWindowStart: string
+  nextWindowStartTime: string | null
   forced: boolean
 }) {
   const secsToNext = useCountdown(forced ? null : nextWindowStart)
@@ -709,7 +715,8 @@ function ScheduleWindowBanner({
     const now = new Date()
     const tomorrow = new Date(now)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const time = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    // Usa o startTime da regra diretamente — sem conversão de timezone
+    const time = nextWindowStartTime ?? d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
     if (d.toDateString() === now.toDateString()) return `hoje às ${time}`
     if (d.toDateString() === tomorrow.toDateString()) return `amanhã às ${time}`
     const wd = d.toLocaleDateString("pt-BR", { weekday: "long" })
@@ -1329,6 +1336,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           <ScheduleWindowBanner
             key="schedule-banner"
             nextWindowStart={data.estimate.nextWindowStart}
+            nextWindowStartTime={data.estimate.nextWindowStartTime ?? null}
             forced={data.forceDispatch}
           />
         )}
@@ -1393,10 +1401,10 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           color="bg-slate-100 dark:bg-slate-500/10 text-slate-600 dark:text-slate-400"
         />
         <MetricCard
-          label="Enviados"
+          label="Disparados"
           value={counts.sending + counts.sent + counts.completed}
           icon={Send}
-          color="bg-emerald-100 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          color="bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400"
         />
         <MetricCard
           label="Na Fila"
@@ -1411,6 +1419,65 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           color="bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400"
         />
       </div>
+
+      {/* ── Delivery funnel ──────────────────────────────────────────────── */}
+      {(() => {
+        const dispatched = counts.sending + counts.sent + counts.completed
+        const hasAckData = counts.delivered > 0 || counts.read > 0
+        if (dispatched === 0) return null
+        const pctDelivered = dispatched > 0 ? Math.round((counts.delivered / dispatched) * 100) : 0
+        const pctRead      = dispatched > 0 ? Math.round((counts.read      / dispatched) * 100) : 0
+        return (
+          <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-4 h-4 text-violet-500" />
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">Funil de Entrega</p>
+              {!hasAckData && (
+                <span className="text-[10px] text-slate-400 ml-auto">Aguardando confirmações do WhatsApp</span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {/* Disparados */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1"><Send className="w-3 h-3" />Disparados</span>
+                  <span className="font-semibold text-slate-900 dark:text-white">100%</span>
+                </div>
+                <div className="h-2 rounded-full bg-blue-100 dark:bg-blue-500/20">
+                  <div className="h-full rounded-full bg-blue-500" style={{ width: "100%" }} />
+                </div>
+                <p className="text-lg font-bold text-slate-900 dark:text-white tabular-nums">{dispatched.toLocaleString("pt-BR")}</p>
+              </div>
+              {/* Entregues */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1"><PackageCheck className="w-3 h-3" />Entregues</span>
+                  <span className={`font-semibold ${hasAckData ? "text-emerald-600 dark:text-emerald-400" : "text-slate-400"}`}>{pctDelivered}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-emerald-100 dark:bg-emerald-500/20">
+                  <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${pctDelivered}%` }} />
+                </div>
+                <p className={`text-lg font-bold tabular-nums ${hasAckData ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>
+                  {hasAckData ? counts.delivered.toLocaleString("pt-BR") : "—"}
+                </p>
+              </div>
+              {/* Lidos */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1"><Eye className="w-3 h-3" />Lidos</span>
+                  <span className={`font-semibold ${hasAckData ? "text-violet-600 dark:text-violet-400" : "text-slate-400"}`}>{pctRead}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-violet-100 dark:bg-violet-500/20">
+                  <div className="h-full rounded-full bg-violet-500 transition-all duration-700" style={{ width: `${pctRead}%` }} />
+                </div>
+                <p className={`text-lg font-bold tabular-nums ${hasAckData ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>
+                  {hasAckData ? counts.read.toLocaleString("pt-BR") : "—"}
+                </p>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Estimate panel ───────────────────────────────────────────────── */}
       {(isRunning || isPaused) && counts.pending > 0 && data.estimate && (

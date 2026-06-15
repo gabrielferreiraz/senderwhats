@@ -25,6 +25,7 @@ import {
   Type,
   ImageIcon,
   Upload,
+  Mic,
 } from "lucide-react"
 import { PhoneMockup } from "./PhoneMockup"
 
@@ -32,9 +33,10 @@ import { PhoneMockup } from "./PhoneMockup"
 
 type StepState = {
   id: string
-  stepType: "text" | "image"
-  body: string           // text content (stepType=text) OR image caption (stepType=image)
+  stepType: "text" | "image" | "audio"
+  body: string           // text content (stepType=text) OR image caption (stepType=image) OR "" for audio
   imageUrl: string | null
+  audioUrl: string | null
   delayAfterSeconds: number
 }
 
@@ -47,6 +49,7 @@ type TemplateInput = {
     delayAfter: number
     stepType?: string
     imageUrl?: string | null
+    audioUrl?: string | null
   }[]
 }
 
@@ -490,12 +493,13 @@ export function ScriptBuilderPage({ template }: Props) {
     template?.steps.length
       ? template.steps.map((s) => ({
           id: uid(),
-          stepType: (s.stepType === "image" ? "image" : "text") as "text" | "image",
+          stepType: (s.stepType === "image" ? "image" : s.stepType === "audio" ? "audio" : "text") as "text" | "image" | "audio",
           body: s.body,
           imageUrl: s.imageUrl ?? null,
+          audioUrl: s.audioUrl ?? null,
           delayAfterSeconds: s.delayAfter,
         }))
-      : [{ id: uid(), stepType: "text" as const, body: "", imageUrl: null, delayAfterSeconds: 30 }]
+      : [{ id: uid(), stepType: "text" as const, body: "", imageUrl: null, audioUrl: null, delayAfterSeconds: 30 }]
   )
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
@@ -523,6 +527,23 @@ export function ScriptBuilderPage({ template }: Props) {
     setSavedAt(null)
   }, [])
 
+  const handleAudioUpload = async (stepId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingStepId(stepId)
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const res = await fetch("/api/uploads", { method: "POST", body: fd })
+      if (!res.ok) return
+      const { url } = await res.json() as { url: string }
+      updateStep(stepId, { audioUrl: url })
+    } finally {
+      setUploadingStepId(null)
+      e.target.value = ""
+    }
+  }
+
   const handleImageUpload = async (stepId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -541,7 +562,7 @@ export function ScriptBuilderPage({ template }: Props) {
   }
 
   const addStep = () => {
-    const newStep: StepState = { id: uid(), stepType: "text", body: "", imageUrl: null, delayAfterSeconds: 30 }
+    const newStep: StepState = { id: uid(), stepType: "text", body: "", imageUrl: null, audioUrl: null, delayAfterSeconds: 30 }
     setSteps((prev) => [...prev, newStep])
     setSavedAt(null)
     setTimeout(() => {
@@ -619,8 +640,9 @@ export function ScriptBuilderPage({ template }: Props) {
       name: name.trim(),
       steps: steps.map((s) => ({
         stepType: s.stepType,
-        body: s.body,
-        imageUrl: s.imageUrl ?? null,
+        body: s.stepType === "audio" ? "" : s.body,
+        imageUrl: s.stepType === "image" ? (s.imageUrl ?? null) : null,
+        audioUrl: s.stepType === "audio" ? (s.audioUrl ?? null) : null,
         delayAfter: s.delayAfterSeconds,
       })),
     }
@@ -750,13 +772,18 @@ export function ScriptBuilderPage({ template }: Props) {
                         <span className="text-[9px] font-semibold text-slate-500 dark:text-slate-600 uppercase tracking-wider">
                           Tipo:
                         </span>
-                        {(["text", "image"] as const).map((t) => (
+                        {([
+                          { type: "text", label: "Texto", icon: <Type className="w-3 h-3" /> },
+                          { type: "image", label: "Imagem", icon: <ImageIcon className="w-3 h-3" /> },
+                          { type: "audio", label: "Áudio", icon: <Mic className="w-3 h-3" /> },
+                        ] as const).map(({ type: t, label, icon }) => (
                           <button
                             key={t}
                             onClick={() =>
                               updateStep(step.id, {
                                 stepType: t,
-                                imageUrl: t === "text" ? null : step.imageUrl,
+                                imageUrl: t === "image" ? step.imageUrl : null,
+                                audioUrl: t === "audio" ? step.audioUrl : null,
                               })
                             }
                             className={`flex items-center gap-1 text-[10px] font-medium px-2.5 py-1 rounded-lg border transition-colors ${
@@ -765,8 +792,8 @@ export function ScriptBuilderPage({ template }: Props) {
                                 : "bg-slate-50 dark:bg-white/[0.03] border-slate-200 dark:border-white/[0.07] text-slate-500 dark:text-slate-500 hover:border-slate-300 dark:hover:border-white/[0.12]"
                             }`}
                           >
-                            {t === "text" ? <Type className="w-3 h-3" /> : <ImageIcon className="w-3 h-3" />}
-                            {t === "text" ? "Texto" : "Imagem"}
+                            {icon}
+                            {label}
                           </button>
                         ))}
                       </div>
@@ -897,6 +924,86 @@ export function ScriptBuilderPage({ template }: Props) {
                               className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 resize-none focus:outline-none leading-relaxed border border-slate-200 dark:border-white/[0.07] rounded-lg px-3 py-2 max-h-24 overflow-y-auto"
                             />
                           </div>
+                        </div>
+                      )}
+
+                      {/* ── Audio step UI ─────────────────────────────────────────── */}
+                      {step.stepType === "audio" && (
+                        <div className="space-y-2">
+                          {step.audioUrl ? (
+                            <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02]">
+                              <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                                <Mic className="w-4 h-4 text-emerald-500" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-medium text-slate-700 dark:text-slate-300 truncate">
+                                  {step.audioUrl.split("/").pop()}
+                                </p>
+                                <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">
+                                  Áudio PTT — será enviado como mensagem de voz
+                                </p>
+                              </div>
+                              <div className="flex gap-1 shrink-0">
+                                <label
+                                  title="Trocar áudio"
+                                  className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-white/[0.10] cursor-pointer transition-colors"
+                                >
+                                  <Upload className="w-3 h-3" />
+                                  Trocar
+                                  <input
+                                    type="file"
+                                    accept=".ogg,.mp3,.wav,.webm,audio/ogg,audio/mpeg,audio/wav,audio/webm"
+                                    className="sr-only"
+                                    onChange={(e) => handleAudioUpload(step.id, e)}
+                                  />
+                                </label>
+                                <button
+                                  onClick={() => updateStep(step.id, { audioUrl: null })}
+                                  title="Remover áudio"
+                                  className="flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 dark:bg-white/[0.06] text-slate-500 hover:bg-rose-100 dark:hover:bg-rose-500/10 hover:text-rose-500 transition-colors"
+                                >
+                                  <X className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <label
+                              className={`flex flex-col items-center justify-center gap-2 py-7 rounded-xl border-2 border-dashed cursor-pointer transition-colors ${
+                                uploadingStepId === step.id
+                                  ? "border-emerald-400/50 bg-emerald-50 dark:bg-emerald-500/5"
+                                  : "border-slate-200 dark:border-white/[0.08] hover:border-emerald-400/50 dark:hover:border-emerald-500/30 hover:bg-emerald-50/50 dark:hover:bg-emerald-500/[0.04]"
+                              }`}
+                            >
+                              {uploadingStepId === step.id ? (
+                                <>
+                                  <Loader2 className="w-6 h-6 text-emerald-500 animate-spin" />
+                                  <span className="text-xs text-emerald-600 dark:text-emerald-400">Enviando...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Mic className="w-6 h-6 text-slate-400 dark:text-slate-600" />
+                                  <div className="text-center">
+                                    <p className="text-xs text-slate-500 dark:text-slate-500">
+                                      Clique para adicionar áudio PTT
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">
+                                      OGG, MP3, WAV, WebM — máx. 16 MB
+                                    </p>
+                                  </div>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept=".ogg,.mp3,.wav,.webm,audio/ogg,audio/mpeg,audio/wav,audio/webm"
+                                className="sr-only"
+                                onChange={(e) => handleAudioUpload(step.id, e)}
+                                disabled={uploadingStepId !== null}
+                              />
+                            </label>
+                          )}
+                          <p className="text-[10px] text-slate-400 dark:text-slate-600 italic">
+                            Áudios PTT não suportam legenda — a mensagem de voz é enviada sozinha.
+                          </p>
                         </div>
                       )}
 

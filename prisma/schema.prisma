@@ -63,9 +63,10 @@ model TemplateStep {
   id         String          @id @default(cuid())
   templateId String
   stepOrder  Int
-  stepType   String          @default("text") // "text" | "image"
-  body       String          // Text content (stepType=text) OR image caption (stepType=image)
+  stepType   String          @default("text") // "text" | "image" | "audio"
+  body       String          // Text content (stepType=text) OR image caption (stepType=image) OR empty for audio PTT
   imageUrl   String?         // Relative path e.g. "/uploads/xxx.jpg" — only for stepType=image
+  audioUrl   String?         // Relative path e.g. "/uploads/xxx.ogg" — only for stepType=audio
   delayAfter Int             @default(60)  // Segundos até o próximo passo
   template   MessageTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
@@ -141,6 +142,7 @@ model CampaignMessage {
   sentAt        DateTime?
   replied       Boolean   @default(false)
   repliedAt     DateTime?
+  ackStatus        Int        @default(0)  // 0=unknown 1=sent 2=delivered 3=read
   failureReason    String?
   failureCategory  String?    // "no_whatsapp" | "session_error" | "timeout" | "unknown"
   createdAt        DateTime   @default(now())

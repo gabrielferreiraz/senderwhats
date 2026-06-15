@@ -2,13 +2,14 @@
 
 import { useEffect, useRef } from "react"
 import { motion, AnimatePresence } from "framer-motion"
-import { Check } from "lucide-react"
+import { Check, Mic, Play } from "lucide-react"
 
 type Step = {
   id: string
-  stepType: "text" | "image"
+  stepType: "text" | "image" | "audio"
   body: string
   imageUrl: string | null
+  audioUrl: string | null
   delayAfterSeconds: number
 }
 
@@ -74,7 +75,6 @@ export function PhoneMockup({ steps }: Props) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" })
   }, [steps.length])
 
-  const activeSteps = steps.filter((s) => s.body.trim() || steps.indexOf(s) === 0)
   const time = now()
 
   return (
@@ -170,7 +170,7 @@ export function PhoneMockup({ steps }: Props) {
               <AnimatePresence>
                 {steps.map((step, index) => {
                   const processed = applyPreview(step.body)
-                  const isEmpty = !step.body.trim()
+                  const isEmpty = step.stepType === "audio" ? !step.audioUrl : !step.body.trim()
                   const isLast = index === steps.length - 1
 
                   return (
@@ -222,6 +222,28 @@ export function PhoneMockup({ steps }: Props) {
                                   <MessageText text={applyPreview(step.body)} />
                                 </p>
                               )}
+                            </div>
+                          ) : step.stepType === "audio" ? (
+                            <div className="flex items-center gap-2 py-0.5 pr-1" style={{ minWidth: 140 }}>
+                              <div className="w-7 h-7 rounded-full bg-[#00a884] flex items-center justify-center shrink-0">
+                                <Play className="w-3.5 h-3.5 text-white fill-white" style={{ marginLeft: 1 }} />
+                              </div>
+                              <div className="flex-1 flex flex-col gap-1 min-w-0">
+                                <div className="flex items-center gap-[2px] h-4">
+                                  {Array.from({ length: 22 }).map((_, i) => (
+                                    <div
+                                      key={i}
+                                      className="w-[2px] rounded-full bg-white/40"
+                                      style={{
+                                        height: `${20 + Math.abs(Math.sin(i * 0.9)) * 60}%`,
+                                        opacity: i < 8 ? 0.8 : 0.3,
+                                      }}
+                                    />
+                                  ))}
+                                </div>
+                                <span className="text-[8px] text-white/40">0:07</span>
+                              </div>
+                              <Mic className="w-3 h-3 text-white/30 shrink-0" />
                             </div>
                           ) : (
                             <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap break-words">

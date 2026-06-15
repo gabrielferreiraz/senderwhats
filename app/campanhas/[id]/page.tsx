@@ -66,6 +66,11 @@ export default async function CampaignDetailPage({
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
   const pending = counts["PENDING"] ?? 0
 
+  const [deliveredCount, readCount] = await Promise.all([
+    prisma.campaignMessage.count({ where: { campaignId: id, ackStatus: { gte: 2 } } }),
+    prisma.campaignMessage.count({ where: { campaignId: id, ackStatus: { gte: 3 } } }),
+  ])
+
   const estimate = computeScheduleEstimate({
     scheduleRules: campaign.scheduleRules,
     minDelay: campaign.minDelay,
@@ -117,6 +122,8 @@ export default async function CampaignDetailPage({
       sent: counts["SENT"] ?? 0,
       failed: counts["FAILED"] ?? 0,
       completed: counts["COMPLETED"] ?? 0,
+      delivered: deliveredCount,
+      read: readCount,
     },
     estimate,
     queueMessages: queueMessages.map((m) => ({

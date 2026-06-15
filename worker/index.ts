@@ -129,7 +129,7 @@ function authHeader(): Record<string, string> {
   return WHATSAPP_API_KEY ? { Authorization: `Bearer ${WHATSAPP_API_KEY}` } : {}
 }
 
-async function sendText(userId: string, number: string, message: string): Promise<void> {
+async function sendText(userId: string, number: string, message: string): Promise<string | null> {
   const res = await fetch(`${WHATSAPP_BASE}/message/send-text/${userId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...authHeader() },
@@ -140,6 +140,12 @@ async function sendText(userId: string, number: string, message: string): Promis
     throw new Error(`WhatsApp API → ${res.status}: ${text}`)
   }
   recordSend(userId)
+  try {
+    const data = await res.json() as { whatsappMessageId?: string }
+    return data.whatsappMessageId ?? null
+  } catch {
+    return null
+  }
 }
 
 const MIME_MAP: Record<string, string> = {
@@ -150,12 +156,19 @@ const MIME_MAP: Record<string, string> = {
   webp: "image/webp",
 }
 
+const AUDIO_MIME_MAP: Record<string, string> = {
+  ogg: "audio/ogg; codecs=opus",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  webm: "audio/webm",
+}
+
 async function sendImage(
   userId: string,
   number: string,
   imageUrl: string,
   caption: string
-): Promise<void> {
+): Promise<string | null> {
   const filePath = join(process.cwd(), "public", imageUrl)
   const buffer = readFileSync(filePath)
   const ext = (imageUrl.split(".").pop() ?? "jpg").toLowerCase()
@@ -177,6 +190,41 @@ async function sendImage(
     throw new Error(`WhatsApp API → ${res.status}: ${text}`)
   }
   recordSend(userId)
+  try {
+    const data = await res.json() as { whatsappMessageId?: string }
+    return data.whatsappMessageId ?? null
+  } catch {
+    return null
+  }
+}
+
+async function sendAudio(userId: string, number: string, audioUrl: string): Promise<string | null> {
+  const filePath = join(process.cwd(), "public", audioUrl)
+  const buffer = readFileSync(filePath)
+  const ext = (audioUrl.split(".").pop() ?? "ogg").toLowerCase()
+  const mimeType = AUDIO_MIME_MAP[ext] ?? "audio/ogg"
+
+  const form = new FormData()
+  form.append("number", number)
+  form.append("audio", new Blob([buffer], { type: mimeType }), `audio.${ext}`)
+
+  const res = await fetch(`${WHATSAPP_BASE}/message/send-audio/${userId}`, {
+    method: "POST",
+    headers: { ...authHeader() },
+    body: form,
+    signal: AbortSignal.timeout(70_000),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`WhatsApp API → ${res.status}: ${text}`)
+  }
+  recordSend(userId)
+  try {
+    const data = await res.json() as { whatsappMessageId?: string }
+    return data.whatsappMessageId ?? null
+  } catch {
+    return null
+  }
 }
 
 type InstanceSnapshot = { ready: boolean; authenticated: boolean; state: string | null }
@@ -361,9 +409,9 @@ async function processMessage(
     const text = applyVariables(processSpintax(customMessage), contact)
     const phone = normalizePhone(contact.phone)
     try {
-      await sendText(vendedorUserId, phone, text)
+      const waMsgId = await sendText(vendedorUserId, phone, text)
       log("✅", `Msg direta → ${phone} (${contact.name ?? "sem nome"})`)
-      await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null })
+      await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) })
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err)
       log("❌", `Falha → ${phone}: ${reason}`)
@@ -375,7 +423,7 @@ async function processMessage(
   // Template-based: find current step
   const step = await prisma.templateStep.findFirst({
     where: { templateId, stepOrder: currentStep },
-    select: { body: true, delayAfter: true, stepType: true, imageUrl: true },
+    select: { body: true, delayAfter: true, stepType: true, imageUrl: true, audioUrl: true },
   })
 
   if (!step) {
@@ -385,6 +433,7 @@ async function processMessage(
 
   const phone = normalizePhone(contact.phone)
   const isImage = step.stepType === "image"
+  const isAudio = step.stepType === "audio"
 
   if (isImage && !step.imageUrl) {
     log("⏩", `Passo ${currentStep} é imagem mas não tem arquivo — marcando como SKIPPED`)
@@ -392,16 +441,28 @@ async function processMessage(
     return
   }
 
+  if (isAudio && !step.audioUrl) {
+    log("⏩", `Passo ${currentStep} é áudio mas não tem arquivo — marcando como SKIPPED`)
+    await updateMsg(msgId, { status: "SKIPPED" })
+    return
+  }
+
   try {
+    let waMsgId: string | null = null
     if (isImage) {
       const caption = applyVariables(processSpintax(step.body), contact)
-      await sendImage(vendedorUserId, phone, step.imageUrl!, caption)
+      waMsgId = await sendImage(vendedorUserId, phone, step.imageUrl!, caption)
       log("🖼️", `Passo ${currentStep} (imagem) → ${phone} (${contact.name ?? "sem nome"})`)
+    } else if (isAudio) {
+      waMsgId = await sendAudio(vendedorUserId, phone, step.audioUrl!)
+      log("🎙️", `Passo ${currentStep} (áudio) → ${phone} (${contact.name ?? "sem nome"})`)
     } else {
       const text = applyVariables(processSpintax(step.body), contact)
-      await sendText(vendedorUserId, phone, text)
+      waMsgId = await sendText(vendedorUserId, phone, text)
       log("✅", `Passo ${currentStep} → ${phone} (${contact.name ?? "sem nome"})`)
     }
+
+    const waFields = { ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) }
 
     const hasNextStep = await prisma.templateStep.count({
       where: { templateId, stepOrder: currentStep + 1 },
@@ -413,9 +474,10 @@ async function processMessage(
         status: "SENDING",
         sentAt: new Date(),
         nextSendAt: new Date(Date.now() + step.delayAfter * 1000),
+        ...waFields,
       })
     } else {
-      await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null })
+      await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ...waFields })
     }
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
@@ -884,7 +946,7 @@ async function remarketingTick(): Promise<void> {
               } else {
                 const step = await prisma.templateStep.findFirst({
                   where: { templateId, stepOrder: 1 },
-                  select: { body: true, stepType: true, imageUrl: true },
+                  select: { body: true, stepType: true, imageUrl: true, audioUrl: true },
                 })
 
                 if (!step) {
@@ -914,13 +976,19 @@ async function remarketingTick(): Promise<void> {
                       const caption = applyVariables(processSpintax(step.body), contactLike)
                       await sendImage(userId, phone, step.imageUrl, caption)
                       log("🖼️", `Remarketing "${campaign.name}": passo ${lead.currentStep} (img) → ${phone}`)
-                    } else if (step.stepType !== "image") {
+                    } else if (step.stepType === "audio" && step.audioUrl) {
+                      await sendAudio(userId, phone, step.audioUrl)
+                      log("🎙️", `Remarketing "${campaign.name}": passo ${lead.currentStep} (áudio) → ${phone}`)
+                    } else if (step.stepType === "image") {
+                      sendError = "image sem imageUrl"
+                      log("⏩", `Remarketing "${campaign.name}": imagem sem URL — pulando ${phone}`)
+                    } else if (step.stepType === "audio") {
+                      sendError = "audio sem audioUrl"
+                      log("⏩", `Remarketing "${campaign.name}": áudio sem arquivo — pulando ${phone}`)
+                    } else {
                       const text = applyVariables(processSpintax(step.body), contactLike)
                       await sendText(userId, phone, text)
                       log("📲", `Remarketing "${campaign.name}": passo ${lead.currentStep} → ${phone}`)
-                    } else {
-                      sendError = "image sem imageUrl"
-                      log("⏩", `Remarketing "${campaign.name}": imagem sem URL — pulando ${phone}`)
                     }
                   } catch (err: unknown) {
                     sendError = errMsg(err)

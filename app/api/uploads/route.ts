@@ -7,10 +7,15 @@ const MAX_SIZE = 16 * 1024 * 1024 // 16 MB
 
 const ALLOWED: Record<string, string> = {
   "image/jpeg": "jpg",
-  "image/jpg": "jpg",
-  "image/png": "png",
-  "image/gif": "gif",
+  "image/jpg":  "jpg",
+  "image/png":  "png",
+  "image/gif":  "gif",
   "image/webp": "webp",
+  "audio/ogg":  "ogg",
+  "audio/mpeg": "mp3",
+  "audio/mp3":  "mp3",
+  "audio/wav":  "wav",
+  "audio/webm": "webm",
 }
 
 export async function POST(req: NextRequest) {
@@ -29,7 +34,7 @@ export async function POST(req: NextRequest) {
   const ext = ALLOWED[file.type]
   if (!ext) {
     return NextResponse.json(
-      { error: "Formato não suportado. Use JPEG, PNG, GIF ou WebP." },
+      { error: "Formato não suportado. Imagens: JPEG, PNG, GIF, WebP. Áudios: OGG, MP3, WAV, WebM." },
       { status: 400 }
     )
   }

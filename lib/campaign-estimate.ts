@@ -8,12 +8,13 @@ export type ScheduleRule = {
 
 export type ScheduleEstimate = {
   inWindow: boolean
-  nextWindowStart: string | null  // ISO — próxima janela que começa após agora
-  leadsPerDay: number             // leads/dia estimados (step 1)
-  avgDelaySeconds: number         // (minDelay + maxDelay) / 2
-  windowSecondsPerDay: number     // duração média da janela em segundos
-  estimatedFinishAt: string | null // ISO
-  workingDaysRemaining: number    // ceil(pending / leadsPerDay)
+  nextWindowStart: string | null      // ISO — apenas para aritmética de data
+  nextWindowStartTime: string | null  // "HH:MM" direto da regra — para exibição (sem conversão de timezone)
+  leadsPerDay: number
+  avgDelaySeconds: number
+  windowSecondsPerDay: number
+  estimatedFinishAt: string | null
+  workingDaysRemaining: number
 }
 
 function parseMinutes(t: string): number {
@@ -53,6 +54,7 @@ export function computeScheduleEstimate({
     return {
       inWindow: true,
       nextWindowStart: null,
+      nextWindowStartTime: null,
       leadsPerDay,
       avgDelaySeconds: avgDelaySec,
       windowSecondsPerDay: 86400,
@@ -75,10 +77,10 @@ export function computeScheduleEstimate({
 
   // ── Próxima janela (estritamente após agora) ──────────────────────────────
   let nextWindowStart: string | null = null
+  let nextWindowStartTime: string | null = null
   outer: for (let d = 0; d <= 8; d++) {
     const day = new Date(now)
     day.setDate(day.getDate() + d)
-    day.setSeconds(0, 0)
     const dow = day.getDay()
 
     const sorted = scheduleRules
@@ -91,6 +93,7 @@ export function computeScheduleEstimate({
       candidate.setHours(Math.floor(sm / 60), sm % 60, 0, 0)
       if (candidate > now) {
         nextWindowStart = candidate.toISOString()
+        nextWindowStartTime = rule.startTime  // "HH:MM" da regra — exibir diretamente, sem conversão
         break outer
       }
     }
@@ -185,6 +188,7 @@ export function computeScheduleEstimate({
   return {
     inWindow,
     nextWindowStart,
+    nextWindowStartTime,
     leadsPerDay,
     avgDelaySeconds: avgDelaySec,
     windowSecondsPerDay: avgWindowSec,

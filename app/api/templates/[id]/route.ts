@@ -21,7 +21,7 @@ export async function PUT(
   const { id } = await params
   const { name, steps } = await req.json() as {
     name: string
-    steps: { body: string; delayAfter: number; stepType?: string; imageUrl?: string | null }[]
+    steps: { body: string; delayAfter: number; stepType?: string; imageUrl?: string | null; audioUrl?: string | null }[]
   }
 
   await prisma.$transaction(async (tx) => {
@@ -29,14 +29,18 @@ export async function PUT(
     await tx.templateStep.deleteMany({ where: { templateId: id } })
     if (steps?.length) {
       await tx.templateStep.createMany({
-        data: steps.map((s, i) => ({
-          templateId: id,
-          stepOrder: i + 1,
-          stepType: s.stepType === "image" ? "image" : "text",
-          body: s.body,
-          imageUrl: s.stepType === "image" ? (s.imageUrl ?? null) : null,
-          delayAfter: Math.max(0, Math.floor(Number(s.delayAfter) || 0)),
-        })),
+        data: steps.map((s, i) => {
+          const type = s.stepType === "image" ? "image" : s.stepType === "audio" ? "audio" : "text"
+          return {
+            templateId: id,
+            stepOrder: i + 1,
+            stepType: type,
+            body: type === "audio" ? "" : (s.body ?? ""),
+            imageUrl: type === "image" ? (s.imageUrl ?? null) : null,
+            audioUrl: type === "audio" ? (s.audioUrl ?? null) : null,
+            delayAfter: Math.max(0, Math.floor(Number(s.delayAfter) || 0)),
+          }
+        }),
       })
     }
   })
