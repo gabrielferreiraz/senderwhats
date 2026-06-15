@@ -376,7 +376,7 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
     setError("")
     if (!name.trim()) { setError("Informe o nome da campanha."); return }
     if (!vendedorId) { setError("Selecione um vendedor."); return }
-    if (!isEdit && contactMode === "manual" && manualCount === 0) {
+    if (contactMode === "manual" && manualCount === 0) {
       setError("Insira pelo menos um número válido.")
       return
     }
@@ -414,7 +414,8 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
             fullEdit: true,
             name: name.trim(),
             vendedorId,
-            listId: listId || null,
+            listId: contactMode === "list" ? (listId || null) : null,
+            ...(contactMode === "manual" && { manualNumbers }),
             templates: validTemplates.length > 0 ? validTemplates : undefined,
             customMessage: validTemplates.length === 0 && customMessage.trim() ? customMessage.trim() : undefined,
             minDelay: delay[0],

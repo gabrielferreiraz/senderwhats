@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import { computeScheduleEstimate } from "@/lib/campaign-estimate"
+import { parsePhones } from "@/lib/phone"
+import { assignTemplateIds, type AbTemplate } from "@/lib/ab-testing"
 
 export async function GET(
   _: NextRequest,
@@ -143,6 +145,7 @@ export async function PUT(
     name?: string
     vendedorId?: string
     listId?: string | null
+    manualNumbers?: string
     templates?: { id: string; weight: number }[]
     customMessage?: string
     minDelay?: number
@@ -169,7 +172,7 @@ export async function PUT(
 
   // ── Full edit (from edit page, DRAFT campaigns only) ───────────────────────
   if (body.fullEdit) {
-    const { name, vendedorId, listId, templates, customMessage, minDelay, maxDelay, enableRemarketing, maxSendsPerDay, scheduleRules,
+    const { name, vendedorId, listId, manualNumbers, templates, customMessage, minDelay, maxDelay, enableRemarketing, maxSendsPerDay, scheduleRules,
       rmktScripts, rmktIntervalMinutes, rmktMaxFollowUps, rmktWindowStart, rmktWindowEnd, rmktAllowedDays, rmktMinDelaySec, rmktMaxDelaySec, rmktMaxPerDay } = body
 
     if (!name?.trim()) return NextResponse.json({ error: "Nome é obrigatório" }, { status: 400 })
@@ -227,6 +230,46 @@ export async function PUT(
         })
       }
     })
+
+    // ── Pré-popular fila com números manuais ─────────────────────────────────
+    if (manualNumbers?.trim()) {
+      const phones = parsePhones(manualNumbers)
+      if (phones.length > 0) {
+        const abTemplates: AbTemplate[] = (() => {
+          if ((templates?.length ?? 0) > 1) return templates as AbTemplate[]
+          if (templates?.length === 1) return [{ id: templates[0]!.id, weight: 100 }]
+          return []
+        })()
+
+        await prisma.$transaction(async (tx) => {
+          // Remove mensagens pendentes anteriores (evita duplicar ao re-salvar)
+          await tx.campaignMessage.deleteMany({ where: { campaignId: id, status: "PENDING" } })
+
+          const contactIds: string[] = []
+          for (const phone of phones) {
+            const contact = await tx.contact.upsert({
+              where: { phone },
+              create: { phone },
+              update: {},
+            })
+            contactIds.push(contact.id)
+          }
+
+          const assignments = assignTemplateIds(contactIds.length, abTemplates)
+          await tx.campaignMessage.createMany({
+            data: contactIds.map((contactId, i) => ({
+              campaignId: id,
+              contactId,
+              currentStep: 1,
+              status: "PENDING",
+              nextSendAt: new Date(),
+              templateId: assignments[i] ?? null,
+            })),
+            skipDuplicates: true,
+          })
+        })
+      }
+    }
 
     return NextResponse.json({ ok: true })
   }
