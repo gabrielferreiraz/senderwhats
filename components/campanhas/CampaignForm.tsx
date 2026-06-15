@@ -142,6 +142,70 @@ function countManualNumbers(text: string): number {
   return parsePhones(text).length
 }
 
+// ─── NumInput ─────────────────────────────────────────────────────────────────
+// Controlled number input that allows temporarily clearing the field.
+// Commits clamped value on blur; syncs display when parent resets the value.
+
+function NumInput({
+  value,
+  onChange,
+  min = 0,
+  max,
+  className,
+}: {
+  value: number
+  onChange: (n: number) => void
+  min?: number
+  max?: number
+  className?: string
+}) {
+  const [raw, setRaw] = useState(String(value))
+  const lastProp = useRef(value)
+
+  // Sync display when parent changes value externally (e.g. form reset)
+  if (value !== lastProp.current) {
+    lastProp.current = value
+    setRaw(String(value))
+  }
+
+  const commit = (str: string) => {
+    const n = parseInt(str, 10)
+    const safe = isNaN(n) ? min : Math.max(min, max !== undefined ? Math.min(max, n) : n)
+    lastProp.current = safe
+    setRaw(String(safe))
+    onChange(safe)
+  }
+
+  return (
+    <input
+      type="number"
+      value={raw}
+      min={min}
+      max={max}
+      className={className}
+      onChange={(e) => {
+        setRaw(e.target.value)
+        const n = parseInt(e.target.value, 10)
+        if (!isNaN(n)) {
+          const safe = Math.max(min, max !== undefined ? Math.min(max, n) : n)
+          lastProp.current = safe
+          onChange(safe)
+        }
+      }}
+      onBlur={(e) => commit(e.target.value)}
+    />
+  )
+}
+
+// ─── A/B weight helpers ───────────────────────────────────────────────────────
+
+function distributeEvenly(n: number): number[] {
+  if (n === 0) return []
+  const base = Math.floor(100 / n)
+  const rem = 100 - base * n
+  return Array.from({ length: n }, (_, i) => (i < rem ? base + 1 : base))
+}
+
 // ─── Draft persistence ────────────────────────────────────────────────────────
 
 const CAMPAIGN_DRAFT_KEY = "campaign_nova_draft"
@@ -279,16 +343,30 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
   const hasEmptyScript = abTemplates.some((e) => !e.id)
 
   const addAbTemplate = () =>
-    setAbTemplates((prev) => [
-      ...prev,
-      { id: "", weight: prev.length === 0 ? 100 : 0 },
-    ])
+    setAbTemplates((prev) => {
+      const next = [...prev, { id: "", weight: 0 }]
+      const weights = distributeEvenly(next.length)
+      return next.map((e, i) => ({ ...e, weight: weights[i]! }))
+    })
 
   const removeAbTemplate = (idx: number) =>
-    setAbTemplates((prev) => prev.filter((_, i) => i !== idx))
+    setAbTemplates((prev) => {
+      const next = prev.filter((_, i) => i !== idx)
+      if (next.length === 0) return next
+      const weights = distributeEvenly(next.length)
+      return next.map((e, i) => ({ ...e, weight: weights[i]! }))
+    })
 
   const updateAbTemplate = (idx: number, patch: Partial<AbEntry>) =>
-    setAbTemplates((prev) => prev.map((t, i) => (i === idx ? { ...t, ...patch } : t)))
+    setAbTemplates((prev) => {
+      const updated = prev.map((t, i) => (i === idx ? { ...t, ...patch } : t))
+      // Auto-adjust the other side when exactly 2 scripts
+      if ("weight" in patch && prev.length === 2) {
+        const other = 1 - idx
+        updated[other] = { ...updated[other]!, weight: Math.max(0, 100 - (patch.weight ?? 0)) }
+      }
+      return updated
+    })
 
   const scheduledAt = schedDate && schedTime ? new Date(`${schedDate}T${schedTime}`) : null
   const schedIsPast = scheduledAt !== null && scheduledAt <= new Date()
@@ -645,16 +723,11 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
 
                 {/* Weight % */}
                 <div className="relative w-20 shrink-0">
-                  <input
-                    type="number"
+                  <NumInput
+                    value={entry.weight}
+                    onChange={(n) => updateAbTemplate(idx, { weight: n })}
                     min={0}
                     max={100}
-                    value={entry.weight}
-                    onChange={(e) =>
-                      updateAbTemplate(idx, {
-                        weight: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)),
-                      })
-                    }
                     className="w-full bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl py-2.5 pl-3 pr-6 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500 pointer-events-none">
@@ -735,11 +808,10 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
         description="Número máximo de disparos por dia. Use 0 para enviar sem limite."
       >
         <div className="flex items-center gap-3">
-          <input
-            type="number"
-            min={0}
+          <NumInput
             value={maxSendsPerDay}
-            onChange={(e) => setMaxSendsPerDay(Math.max(0, parseInt(e.target.value) || 0))}
+            onChange={setMaxSendsPerDay}
+            min={0}
             className="w-28 bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2.5 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center"
           />
           <span className="text-xs text-slate-500">
@@ -894,11 +966,10 @@ export function CampaignForm({ vendedores, lists, templates, campaignId, initial
 
                   {/* Max per day */}
                   <div className="flex items-center gap-3">
-                    <input
-                      type="number"
-                      min={0}
+                    <NumInput
                       value={rmktMaxPerDay}
-                      onChange={(e) => setRmktMaxPerDay(Math.max(0, parseInt(e.target.value) || 0))}
+                      onChange={setRmktMaxPerDay}
+                      min={0}
                       className="w-24 bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl px-3 py-2 text-sm text-slate-900 dark:text-white focus:outline-none focus:border-violet-500/40 transition-all text-center tabular-nums"
                     />
                     <span className="text-xs text-slate-500">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { ChevronDown } from "lucide-react"
 
 type Unit = "minutes" | "hours" | "days" | "weeks"
@@ -35,19 +35,27 @@ type Props = {
 export function IntervalPicker({ value, onChange, className = "" }: Props) {
   const [unit, setUnit] = useState<Unit>(() => detectUnit(value))
   const displayValue = Math.max(1, Math.round(value / FACTORS[unit]))
+  const [raw, setRaw] = useState(String(displayValue))
+  const lastDisplay = useRef(displayValue)
 
-  const handleValueChange = useCallback((raw: string) => {
-    const n = parseInt(raw, 10)
+  // Sync raw when displayValue changes externally (parent reset or unit switch)
+  if (displayValue !== lastDisplay.current) {
+    lastDisplay.current = displayValue
+    setRaw(String(displayValue))
+  }
+
+  const handleValueChange = useCallback((str: string) => {
+    setRaw(str)
+    const n = parseInt(str, 10)
     if (isNaN(n) || n < MIN_DISPLAY[unit]) return
     onChange(n * FACTORS[unit])
   }, [unit, onChange])
 
   const handleUnitChange = useCallback((newUnit: Unit) => {
-    // Snap value to nearest whole unit so displayed number always matches stored minutes.
-    // e.g. "24 horas" (1440 min) → switch to "dias" → snap to 1 dia (1440 min, unchanged)
-    // e.g. "30 minutos" → switch to "horas" → snap to 1 hora (60 min)
     const rounded = Math.max(1, Math.round(value / FACTORS[newUnit]))
+    lastDisplay.current = rounded // prevent spurious sync on re-render
     setUnit(newUnit)
+    setRaw(String(rounded))
     onChange(rounded * FACTORS[newUnit])
   }, [value, onChange])
 
@@ -68,8 +76,15 @@ export function IntervalPicker({ value, onChange, className = "" }: Props) {
         <input
           type="number"
           min={MIN_DISPLAY[unit]}
-          value={displayValue}
+          value={raw}
           onChange={(e) => handleValueChange(e.target.value)}
+          onBlur={() => {
+            const n = parseInt(raw, 10)
+            const safe = isNaN(n) ? MIN_DISPLAY[unit] : Math.max(MIN_DISPLAY[unit], n)
+            lastDisplay.current = safe
+            setRaw(String(safe))
+            onChange(safe * FACTORS[unit])
+          }}
           className="w-20 min-w-0 bg-transparent px-3 py-2.5 text-sm text-slate-900 dark:text-white outline-none text-center tabular-nums"
         />
 
