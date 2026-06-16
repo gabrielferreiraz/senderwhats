@@ -803,9 +803,10 @@ async function tick(): Promise<void> {
             continue
           }
 
-          // Global rate limiter: if remarketing (or another campaign) sent from
-          // this instance very recently, wait for the next tick to avoid back-to-back sends.
-          if (!tryAcquireSendSlot(campaign.vendedor.userId, campaign.minDelay * 1000)) {
+          // Global rate limiter: only between NEW leads (PENDING), not between steps of the
+          // same script (SENDING). Step timing is controlled by TemplateStep.delayAfter
+          // via nextSendAt — the campaign minDelay applies only to inter-lead gaps.
+          if (msg.status !== "SENDING" && !tryAcquireSendSlot(campaign.vendedor.userId, campaign.minDelay * 1000)) {
             log("⏳", `"${campaign.name}" aguardando rate global da instância (envio recente de outra origem)`)
             break
           }
