@@ -18,6 +18,8 @@ import cron from "node-cron"
 import { PrismaClient } from "@prisma/client"
 import { PrismaPg } from "@prisma/adapter-pg"
 import { Pool } from "pg"
+import { readFileSync } from "fs"
+import { join } from "path"
 
 // ─── Timezone ─────────────────────────────────────────────────────────────────
 // Business timezone: Mato Grosso do Sul (UTC-4), permanently — no DST.
@@ -164,7 +166,19 @@ const AUDIO_MIME_MAP: Record<string, string> = {
   webm: "audio/webm",
 }
 
+const UPLOAD_DIR = join(process.cwd(), "public", "uploads")
+
 async function fetchUpload(relativeUrl: string): Promise<ArrayBuffer> {
+  // Extract filename from URL path: /api/uploads/abc.png → abc.png
+  const filename = relativeUrl.split("/").pop() ?? ""
+  if (filename && !filename.includes("..") && !filename.includes("/") && !filename.includes("\\")) {
+    try {
+      const buf = readFileSync(join(UPLOAD_DIR, filename))
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer
+    } catch {
+      // File not on disk — fall through to HTTP (e.g. dev environment with separate processes)
+    }
+  }
   const res = await fetch(`${APP_URL}${relativeUrl}`, { signal: AbortSignal.timeout(30_000) })
   if (!res.ok) throw new Error(`Upload não encontrado: ${relativeUrl} (HTTP ${res.status})`)
   return res.arrayBuffer()
