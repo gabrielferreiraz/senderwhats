@@ -114,11 +114,14 @@ async function getSessionStatus(
 
 async function createSession(userId: string): Promise<void> {
   const res = await fetch(`${BASE}/instance/create/${userId}`, {
-    method: "POST",
     headers: authHeaders(),
     signal: AbortSignal.timeout(10_000),
   })
   console.log(tag(userId), `create → HTTP ${res.status}`)
+  if (!res.ok) {
+    const text = await res.text().catch(() => "")
+    throw new Error(`HTTP ${res.status}${text ? `: ${text}` : ""}`)
+  }
 }
 
 // ─── Handler ─────────────────────────────────────────────────────────────────
