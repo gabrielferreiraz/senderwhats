@@ -318,7 +318,46 @@ function classifyFailure(reason: string): string {
   if (/não possui whatsapp|no whatsapp|not registered|number not/i.test(reason)) return "no_whatsapp"
   if (/desconect|disconnect|session|sessão/i.test(reason)) return "session_error"
   if (/timeout|timed out|econnrefused|enotfound/i.test(reason)) return "timeout"
+  // API retorna 503 { error: 'instance_not_ready' } durante warm-up ou WidFactory
+  if (/instance_not_ready|WidFactory|Cannot read properties of undefined|not initialized|client not ready/i.test(reason)) return "transient"
   return "unknown"
+}
+
+/** Erros transitórios devem ser retentados, não marcados como FAILED permanentemente. */
+function isTransient(reason: string): boolean {
+  return classifyFailure(reason) === "transient"
+}
+
+const MAX_TRANSIENT_RETRIES = 3
+const TRANSIENT_DELAY_MS = 60_000 // 60s padrão antes de retentar
+
+/**
+ * Extrai o retryAfter (em ms) do corpo JSON da resposta 503 da API.
+ * Formato: "WhatsApp API → 503: {"error":"instance_not_ready","retryAfter":5}"
+ */
+function parseRetryAfterMs(reason: string): number {
+  try {
+    const jsonStart = reason.indexOf("{")
+    if (jsonStart >= 0) {
+      const parsed = JSON.parse(reason.slice(jsonStart)) as { retryAfter?: number }
+      if (typeof parsed.retryAfter === "number" && parsed.retryAfter > 0) {
+        return parsed.retryAfter * 1000
+      }
+    }
+  } catch {}
+  return TRANSIENT_DELAY_MS
+}
+
+/** Extrai o contador de tentativas transitórias embutido no failureReason. */
+function parseTransientRetries(reason: string): number {
+  const m = reason.match(/^\[t:(\d+)\]/)
+  return m ? parseInt(m[1]!, 10) : 0
+}
+
+/** Embute o contador de tentativas no início do failureReason. */
+function packTransientRetry(reason: string, attempt: number): string {
+  const clean = reason.replace(/^\[t:\d+\]\s*/, "")
+  return `[t:${attempt}] ${clean}`.slice(0, 500)
 }
 
 // ─── Schedule window helpers ──────────────────────────────────────────────────
@@ -424,7 +463,18 @@ async function processMessage(
       await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) })
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err)
-      log("❌", `Falha → ${phone}: ${reason}`)
+      if (isTransient(reason)) {
+        const retries = parseTransientRetries(reason)
+        if (retries < MAX_TRANSIENT_RETRIES) {
+          const delayMs = parseRetryAfterMs(reason)
+          log("⚠️", `Falha transitória [${retries + 1}/${MAX_TRANSIENT_RETRIES}] → ${phone}: ${reason.slice(0, 120)} (retry em ${delayMs / 1000}s)`)
+          await updateMsg(msgId, { status: "PENDING", nextSendAt: new Date(Date.now() + delayMs), failureReason: packTransientRetry(reason, retries + 1) })
+          return
+        }
+        log("❌", `Falha transitória esgotou tentativas → ${phone}: ${reason.slice(0, 120)}`)
+      } else {
+        log("❌", `Falha → ${phone}: ${reason}`)
+      }
       await updateMsg(msgId, { status: "FAILED", sentAt: new Date(), failureReason: reason.slice(0, 500), failureCategory: classifyFailure(reason) })
     }
     return
@@ -491,7 +541,18 @@ async function processMessage(
     }
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)
-    log("❌", `Falha → ${phone}: ${reason}`)
+    if (isTransient(reason)) {
+      const retries = parseTransientRetries(reason)
+      if (retries < MAX_TRANSIENT_RETRIES) {
+        const delayMs = parseRetryAfterMs(reason)
+        log("⚠️", `Falha transitória [${retries + 1}/${MAX_TRANSIENT_RETRIES}] → ${phone}: ${reason.slice(0, 120)} (retry em ${delayMs / 1000}s)`)
+        await updateMsg(msgId, { status: "PENDING", nextSendAt: new Date(Date.now() + delayMs), failureReason: packTransientRetry(reason, retries + 1) })
+        return
+      }
+      log("❌", `Falha transitória esgotou tentativas → ${phone}: ${reason.slice(0, 120)}`)
+    } else {
+      log("❌", `Falha → ${phone}: ${reason}`)
+    }
     await updateMsg(msgId, { status: "FAILED", sentAt: new Date(), failureReason: reason.slice(0, 500), failureCategory: classifyFailure(reason) })
   }
 }

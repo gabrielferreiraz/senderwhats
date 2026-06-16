@@ -8,15 +8,17 @@ const authHeaders = (): Record<string, string> =>
 export type ConnState = "open" | "close" | "connecting"
 
 /**
- * Normalizes whatsapp-web.js status into a consistent shape.
+ * Normalizes the WhatsApp API status into a consistent shape for the frontend.
  *
- * WhatsApp API response:
- *   { status: "ready"|"not_ready", state: "CONNECTED"|..., authenticated: bool, lastError: string|null }
- *   404 (plain text) → session does not exist
+ * API response after item 5 (granular status):
+ *   { status: "ready"|"qr_pending"|"initializing"|"disconnected"|"not_found",
+ *     state: string|null, authenticated: bool, readySince: string|null, lastError: string|null }
  *
- * Returns both:
- *   - `state` (normalized: "open"|"close"|"connecting") — used by AddVendedorModal
- *   - `status` / `authenticated` / `lastError` — used by VendedorCard
+ * HTTP 404 now returns JSON { status: "not_found" } — body is parseable.
+ *
+ * Frontend consumers:
+ *   - AddVendedorModal uses `state` ("open" = connected, triggers goSuccess)
+ *   - VendedorCard uses `status` / `authenticated` / `lastError`
  */
 export async function GET(
   _req: NextRequest,
@@ -25,10 +27,14 @@ export async function GET(
   const { userId } = await params
 
   try {
-    const res = await fetch(`${BASE}/instance/status/${userId}`, { headers: authHeaders() })
+    const res = await fetch(`${BASE}/instance/status/${userId}`, {
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(5_000),
+    })
 
-    // 404 = session not found (plain text body — do not call .json())
     if (res.status === 404) {
+      // Body is now JSON { status: 'not_found' } — parse it if needed, but
+      // the frontend just needs to know the session doesn't exist.
       return NextResponse.json({
         state: "close" satisfies ConnState,
         status: "not_ready",
@@ -47,26 +53,31 @@ export async function GET(
     }
 
     const data = (await res.json()) as {
-      status?: string
+      status?: "ready" | "qr_pending" | "initializing" | "disconnected" | "not_found"
       state?: string | null
       authenticated?: boolean
+      readySince?: string | null
       lastError?: string | null
     }
 
-    // ready = Puppeteer client fully connected and authenticated
-    const isReady = data.status === "ready" || data.state === "CONNECTED"
+    // Trust the granular status field from the updated API (item 5).
+    // "ready" means: connected + authenticated + warm-up period elapsed.
+    const isReady = data.status === "ready"
 
-    const state: ConnState = isReady
-      ? "open"
-      : data.state === "DISCONNECTED" || data.state === null
-      ? "close"
-      : "connecting"
+    // Map to the ConnState used by AddVendedorModal
+    const state: ConnState =
+      isReady
+        ? "open"
+        : data.status === "disconnected" || data.status === "not_found" || data.state === "DISCONNECTED"
+        ? "close"
+        : "connecting" // initializing | qr_pending
 
     return NextResponse.json({
       state,
       status: isReady ? "ready" : "not_ready",
       authenticated: data.authenticated ?? isReady,
       lastError: data.lastError ?? null,
+      readySince: data.readySince ?? null,
     })
   } catch (err) {
     return NextResponse.json({
@@ -74,6 +85,7 @@ export async function GET(
       status: "not_ready",
       authenticated: false,
       lastError: err instanceof Error ? err.message : "fetch_failed",
+      readySince: null,
     })
   }
 }

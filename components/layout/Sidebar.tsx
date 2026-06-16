@@ -69,16 +69,28 @@ export function Sidebar() {
 
       {/* Instance status — minimal */}
       <div className="px-3 pb-4 shrink-0">
-        <div className="flex items-center justify-between px-1 py-2">
-          <span className="text-[11px] text-slate-400 dark:text-slate-600">
-            {mounted ? `${instances.online} / ${instances.total} online` : "—"}
+        <div className="flex items-center justify-between px-1 py-2 border-t border-slate-100 dark:border-white/[0.04] mt-1 pt-3">
+          <span className="text-[11px] text-slate-400 dark:text-slate-500">
+            {mounted
+              ? instances.total === 0
+                ? "Nenhuma instância"
+                : `${instances.online} / ${instances.total} online`
+              : "—"}
           </span>
-          <span className={`w-1.5 h-1.5 rounded-full ${
-            !mounted ? "bg-slate-300 dark:bg-slate-700"
-            : onlineRatio === 0 ? "bg-slate-300 dark:bg-slate-700"
-            : onlineRatio === 1 ? "bg-emerald-500"
-            : "bg-amber-400"
-          }`} />
+          {mounted && instances.total > 0 && (
+            <span className="relative flex h-1.5 w-1.5 shrink-0">
+              {onlineRatio > 0 && (
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                  onlineRatio === 1 ? "bg-emerald-500" : "bg-amber-400"
+                }`} />
+              )}
+              <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${
+                onlineRatio === 0 ? "bg-slate-300 dark:bg-slate-700"
+                : onlineRatio === 1 ? "bg-emerald-500"
+                : "bg-amber-400"
+              }`} />
+            </span>
+          )}
         </div>
       </div>
     </aside>

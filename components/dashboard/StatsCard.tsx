@@ -15,28 +15,27 @@ type StatsCardProps = {
 }
 
 const iconColors = {
-  violet: "text-violet-500 dark:text-violet-400",
-  emerald: "text-emerald-500 dark:text-emerald-400",
-  indigo: "text-indigo-500 dark:text-indigo-400",
-  rose: "text-rose-500 dark:text-rose-400",
+  violet: "text-violet-600 dark:text-violet-400",
+  emerald: "text-emerald-600 dark:text-emerald-400",
+  indigo: "text-indigo-600 dark:text-indigo-400",
+  rose: "text-rose-600 dark:text-rose-400",
 }
 
-const accentColors = {
-  violet: "bg-violet-500",
-  emerald: "bg-emerald-500",
-  indigo: "bg-indigo-500",
-  rose: "bg-rose-500",
+const iconBgs = {
+  violet: "bg-violet-50 dark:bg-violet-500/10",
+  emerald: "bg-emerald-50 dark:bg-emerald-500/10",
+  indigo: "bg-indigo-50 dark:bg-indigo-500/10",
+  rose: "bg-rose-50 dark:bg-rose-500/10",
 }
 
 export function StatsCard({ label, value, Icon, iconColor, trend, sub }: StatsCardProps) {
   return (
     <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5 flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span className={`w-1 h-4 rounded-full ${accentColors[iconColor]}`} />
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</span>
+        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconBgs[iconColor]}`}>
+          <Icon className={`w-3.5 h-3.5 ${iconColors[iconColor]}`} />
         </div>
-        <Icon className={`w-4 h-4 ${iconColors[iconColor]}`} />
       </div>
 
       <div>

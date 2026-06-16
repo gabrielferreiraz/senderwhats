@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react"
 import { motion, AnimatePresence } from "framer-motion"
+import Link from "next/link"
 import {
   Send,
   Megaphone,
@@ -299,14 +300,14 @@ export function DashboardClient({ initial, vendedores }: Props) {
               { href: "/campanhas/nova", label: "Nova campanha", sub: "Disparo em massa" },
               { href: "/scripts/novo", label: "Criar script", sub: "Sequência de msgs" },
             ].map(({ href, label, sub }) => (
-              <a
+              <Link
                 key={href}
                 href={href}
                 className="flex flex-col gap-0.5 px-3 py-2.5 rounded-lg border border-slate-200 dark:border-white/[0.06] hover:border-violet-300 dark:hover:border-violet-500/30 hover:bg-violet-50 dark:hover:bg-violet-500/[0.04] transition-colors group"
               >
                 <span className="text-xs font-medium text-slate-800 dark:text-slate-200 group-hover:text-violet-700 dark:group-hover:text-violet-300 transition-colors">{label}</span>
                 <span className="text-[10px] text-slate-400 dark:text-slate-600">{sub}</span>
-              </a>
+              </Link>
             ))}
           </div>
         </div>

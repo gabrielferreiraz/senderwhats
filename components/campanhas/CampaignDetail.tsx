@@ -208,14 +208,17 @@ function fmtAllowedDays(csv: string): string {
 
 function parseFailureReason(raw: string | null): string {
   if (!raw) return "Erro desconhecido"
+  // Strip transient retry counter prefix added by the worker ("[t:N] ...")
+  const clean = raw.replace(/^\[t:\d+\]\s*/, "")
   try {
-    const jsonStart = raw.indexOf("{")
+    const jsonStart = clean.indexOf("{")
     if (jsonStart >= 0) {
-      const parsed = JSON.parse(raw.slice(jsonStart)) as { message?: string }
+      const parsed = JSON.parse(clean.slice(jsonStart)) as { message?: string; details?: string }
+      if (typeof parsed.details === "string") return parsed.details.slice(0, 120)
       if (typeof parsed.message === "string") return parsed.message
     }
   } catch {}
-  return raw.length > 120 ? raw.slice(0, 117) + "…" : raw
+  return clean.length > 120 ? clean.slice(0, 117) + "…" : clean
 }
 
 // ─── Hook: live countdown ─────────────────────────────────────────────────────
@@ -368,11 +371,11 @@ function SentRow({ msg }: { msg: SentMessage }) {
           <span className="text-[10px] font-mono font-semibold text-violet-400">
             {fmtCountdown(secs)}
           </span>
-        ) : (
+        ) : msg.sentAt ? (
           <span className="text-[10px] text-slate-400 dark:text-slate-700">
-            Enviado em: {fmtTime(msg.sentAt)}
+            {fmtTime(msg.sentAt)}
           </span>
-        )}
+        ) : null}
       </div>
     </div>
   )
@@ -384,11 +387,19 @@ const FAILURE_CATEGORY_CFG: Record<string, { label: string; cls: string }> = {
   no_whatsapp:   { label: "Sem WhatsApp",   cls: "bg-orange-100 dark:bg-orange-500/10 text-orange-600 dark:text-orange-400" },
   session_error: { label: "Sessão perdida", cls: "bg-amber-100 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400" },
   timeout:       { label: "Timeout",        cls: "bg-slate-100 dark:bg-white/5 text-slate-500" },
+  transient:     { label: "Retentando",     cls: "bg-blue-100 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400" },
   unknown:       { label: "Erro",           cls: "bg-rose-100 dark:bg-rose-500/10 text-rose-500" },
+}
+
+function parseTransientAttempt(raw: string | null): number | null {
+  if (!raw) return null
+  const m = raw.match(/^\[t:(\d+)\]/)
+  return m ? parseInt(m[1]!, 10) : null
 }
 
 function FailedRow({ msg }: { msg: FailedMessage }) {
   const catCfg = msg.failureCategory ? (FAILURE_CATEGORY_CFG[msg.failureCategory] ?? FAILURE_CATEGORY_CFG.unknown) : null
+  const transientAttempt = parseTransientAttempt(msg.failureReason)
 
   return (
     <div className="flex items-start gap-3 py-2.5 border-b border-slate-100 dark:border-white/[0.04] last:border-0">
@@ -403,6 +414,7 @@ function FailedRow({ msg }: { msg: FailedMessage }) {
           {catCfg && (
             <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full ${catCfg.cls}`}>
               {catCfg.label}
+              {transientAttempt !== null && ` ${transientAttempt}/3`}
             </span>
           )}
         </div>
@@ -410,9 +422,11 @@ function FailedRow({ msg }: { msg: FailedMessage }) {
           {parseFailureReason(msg.failureReason)}
         </p>
       </div>
-      <span className="text-[10px] text-slate-400 dark:text-slate-700 shrink-0 mt-0.5">
-        Falhou em: {fmtTime(msg.sentAt)}
-      </span>
+      {msg.sentAt && (
+        <span className="text-[10px] text-slate-400 dark:text-slate-700 shrink-0 mt-0.5">
+          {fmtTime(msg.sentAt)}
+        </span>
+      )}
     </div>
   )
 }
