@@ -106,8 +106,16 @@ function formatTitleCase(name: string | null | undefined): string {
   ).join(" ")
 }
 
+function getSaudacao(): string {
+  const hour = localNow().getUTCHours()
+  if (hour >= 6 && hour < 12) return "Bom dia"
+  if (hour >= 12 && hour < 18) return "Boa tarde"
+  return "Boa noite"
+}
+
 function applyVariables(template: string, contact: ContactLike): string {
   let result = template
+  result = result.replace(/\{saudacao\}/gi, getSaudacao())
   result = result.replace(/\{nome\}/gi, getFirstName(contact.name))
   result = result.replace(/\{primeiro_nome\}/gi, getFirstName(contact.name))
   result = result.replace(/\{nome_completo\}/gi, formatTitleCase(contact.name))

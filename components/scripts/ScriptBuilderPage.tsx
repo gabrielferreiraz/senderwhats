@@ -828,7 +828,7 @@ export function ScriptBuilderPage({ template }: Props) {
                               {QUICK_TAGS.map((tag) => (
                                 <button
                                   key={tag.label}
-                                  onClick={() => insertAtCursor(step.id, tag.value)}
+                                  onMouseDown={(e) => { e.preventDefault(); insertAtCursor(step.id, tag.value) }}
                                   className="text-[10px] font-mono font-medium px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/[0.05] hover:bg-violet-100 dark:hover:bg-violet-600/20 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors border border-slate-200 dark:border-white/[0.05]"
                                 >
                                   {tag.label}
@@ -970,7 +970,7 @@ export function ScriptBuilderPage({ template }: Props) {
                         {QUICK_TAGS.map((tag) => (
                           <button
                             key={tag.label}
-                            onClick={() => insertAtCursor(step.id, tag.value)}
+                            onMouseDown={(e) => { e.preventDefault(); insertAtCursor(step.id, tag.value) }}
                             className="text-[10px] font-mono font-medium px-2 py-1 rounded-md bg-slate-100 dark:bg-white/[0.05] hover:bg-violet-100 dark:hover:bg-violet-600/20 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-300 transition-colors border border-slate-200 dark:border-white/[0.05] hover:border-violet-400/40 dark:hover:border-violet-500/20"
                           >
                             {tag.label}

@@ -149,7 +149,24 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
   ) {
     const editorRef = useRef<HTMLDivElement>(null)
     const lastRawRef = useRef<string>(value)
+    const savedRangeRef = useRef<Range | null>(null)
     const [isEmpty, setIsEmpty] = useState(!value.trim())
+
+    // Track selection inside this editor and save it so insertions work even after blur
+    useEffect(() => {
+      const onSelectionChange = () => {
+        const sel = window.getSelection()
+        if (
+          sel &&
+          sel.rangeCount > 0 &&
+          editorRef.current?.contains(sel.getRangeAt(0).startContainer)
+        ) {
+          savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+        }
+      }
+      document.addEventListener("selectionchange", onSelectionChange)
+      return () => document.removeEventListener("selectionchange", onSelectionChange)
+    }, [])
 
     // Mount: populate DOM from initial value
     useEffect(() => {
@@ -273,11 +290,28 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
 
     // ── Imperative handle ──────────────────────────────────────────────────────
 
+    // Restore cursor to savedRange when the editor doesn't currently hold the selection
+    const restoreCursor = useCallback(() => {
+      const el = editorRef.current
+      if (!el) return
+      const sel = window.getSelection()
+      const editorHasFocus =
+        sel && sel.rangeCount > 0 && el.contains(sel.getRangeAt(0).startContainer)
+      if (!editorHasFocus && savedRangeRef.current) {
+        el.focus()
+        const s = window.getSelection()
+        s?.removeAllRanges()
+        s?.addRange(savedRangeRef.current)
+      } else {
+        el.focus()
+      }
+    }, [])
+
     useImperativeHandle(ref, () => ({
       insertChip(raw: string) {
         const el = editorRef.current
         if (!el) return
-        el.focus()
+        restoreCursor()
         const chip = raw.startsWith("{[") ? makeSpintaxChip(raw) : makeVarChip(raw)
         insertChipAtCursor(chip, el)
         triggerChange()
@@ -286,7 +320,7 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
       insertText(text: string) {
         const el = editorRef.current
         if (!el) return
-        el.focus()
+        restoreCursor()
         // eslint-disable-next-line @typescript-eslint/no-deprecated
         document.execCommand("insertText", false, text)
         triggerChange()
@@ -295,7 +329,7 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
       formatSelection(marker: string) {
         const el = editorRef.current
         if (!el) return
-        el.focus()
+        restoreCursor()
         const sel = window.getSelection()
         if (!sel || sel.rangeCount === 0) return
         const range = sel.getRangeAt(0)
@@ -326,7 +360,7 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
       insertListItem() {
         const el = editorRef.current
         if (!el) return
-        el.focus()
+        restoreCursor()
         const sel = window.getSelection()
         if (!sel || sel.rangeCount === 0) return
         const range = sel.getRangeAt(0)
@@ -344,7 +378,7 @@ export const RichScriptEditor = forwardRef<RichEditorHandle, Props>(
       focus() {
         editorRef.current?.focus()
       },
-    }), [triggerChange])
+    }), [triggerChange, restoreCursor])
 
     return (
       <div className="relative">
