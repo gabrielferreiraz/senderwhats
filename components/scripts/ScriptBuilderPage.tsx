@@ -28,6 +28,7 @@ import {
   Mic,
 } from "lucide-react"
 import { PhoneMockup } from "./PhoneMockup"
+import { RichScriptEditor, type RichEditorHandle } from "./RichScriptEditor"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -251,25 +252,6 @@ function VarPicker({
       )}
     </motion.div>
   )
-}
-
-// ─── Spintax helpers ─────────────────────────────────────────────────────────
-
-type SpintaxMatch = { start: number; end: number; options: string[] }
-
-function findSpintaxAtCursor(text: string, cursor: number): SpintaxMatch | null {
-  const regex = /\{\[([^\]]+)\]\}/g
-  let m
-  while ((m = regex.exec(text)) !== null) {
-    if (cursor >= m.index && cursor <= m.index + m[0].length) {
-      return {
-        start: m.index,
-        end: m.index + m[0].length,
-        options: m[1].split("|").map((s) => s.trim()).filter(Boolean),
-      }
-    }
-  }
-  return null
 }
 
 // ─── SpintaxPicker popover ───────────────────────────────────────────────────
@@ -509,11 +491,14 @@ export function ScriptBuilderPage({ template }: Props) {
   const [listVars, setListVars] = useState<ListVars[]>([])
   const [varPickerStepId, setVarPickerStepId] = useState<string | null>(null)
   const [spintaxPickerStepId, setSpintaxPickerStepId] = useState<string | null>(null)
-  const [editingSpintax, setEditingSpintax] = useState<{ stepId: string } & SpintaxMatch | null>(null)
-  const [cursorSpintax, setCursorSpintax] = useState<Record<string, SpintaxMatch | null>>({})
+  const [editingChip, setEditingChip] = useState<{
+    stepId: string
+    options: string[]
+    replace: (raw: string) => void
+  } | null>(null)
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
 
-  const textareaRefs = useRef<Record<string, HTMLTextAreaElement | null>>({})
+  const editorRefs = useRef<Record<string, RichEditorHandle | null>>({})
 
   useEffect(() => {
     fetch("/api/variables")
@@ -573,7 +558,7 @@ export function ScriptBuilderPage({ template }: Props) {
     setSteps((prev) => [...prev, newStep])
     setSavedAt(null)
     setTimeout(() => {
-      textareaRefs.current[newStep.id]?.focus()
+      editorRefs.current[newStep.id]?.focus()
     }, 50)
   }
 
@@ -583,61 +568,19 @@ export function ScriptBuilderPage({ template }: Props) {
     setSavedAt(null)
   }
 
-  // Uses execCommand so the browser records the change in its native undo/redo stack.
-  // Falls back to direct state update if execCommand is unavailable.
-  const applyToTextarea = useCallback((
-    stepId: string,
-    start: number,
-    end: number,
-    text: string,
-    cursorStart: number,
-    cursorEnd?: number,
-  ) => {
-    const el = textareaRefs.current[stepId]
-    if (!el) return
-    el.focus()
-    el.setSelectionRange(start, end)
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    if (document.execCommand('insertText', false, text)) {
-      setTimeout(() => el.setSelectionRange(cursorStart, cursorEnd ?? cursorStart), 0)
+  const insertAtCursor = useCallback((stepId: string, tag: string) => {
+    const editor = editorRefs.current[stepId]
+    if (!editor) return
+    if (tag.startsWith("{[") || /^\{[a-zA-Z_][a-zA-Z0-9_]*\}$/.test(tag)) {
+      editor.insertChip(tag)
     } else {
-      // Fallback for environments without execCommand (breaks undo)
-      const step = steps.find((s) => s.id === stepId)
-      if (!step) return
-      const newBody = step.body.slice(0, start) + text + step.body.slice(end)
-      updateStep(stepId, { body: newBody })
-      setTimeout(() => {
-        el.setSelectionRange(cursorStart, cursorEnd ?? cursorStart)
-      }, 0)
+      editor.insertText(tag)
     }
-  }, [steps, updateStep])
-
-  const insertAtCursor = useCallback((
-    stepId: string,
-    tag: string,
-    replaceRange?: { start: number; end: number }
-  ) => {
-    const el = textareaRefs.current[stepId]
-    if (!el) return
-    const start = replaceRange?.start ?? el.selectionStart
-    const end = replaceRange?.end ?? el.selectionEnd
-    applyToTextarea(stepId, start, end, tag, start + tag.length)
-    setCursorSpintax((prev) => ({ ...prev, [stepId]: null }))
-  }, [applyToTextarea])
+  }, [])
 
   const formatText = useCallback((stepId: string, marker: string) => {
-    const el = textareaRefs.current[stepId]
-    if (!el) return
-    const start = el.selectionStart
-    const end = el.selectionEnd
-    const selected = el.value.slice(start, end)
-    if (selected) {
-      applyToTextarea(stepId, start, end, marker + selected + marker,
-        start + marker.length, end + marker.length)
-    } else {
-      applyToTextarea(stepId, start, end, marker + marker, start + marker.length)
-    }
-  }, [applyToTextarea])
+    editorRefs.current[stepId]?.formatSelection(marker)
+  }, [])
 
   const handleSave = async () => {
     if (!name.trim()) return
@@ -920,16 +863,17 @@ export function ScriptBuilderPage({ template }: Props) {
                                 </AnimatePresence>
                               </div>
                             </div>
-                            <textarea
-                              ref={(el) => { textareaRefs.current[step.id] = el }}
-                              value={step.body}
-                              rows={2}
-                              onChange={(e) => updateStep(step.id, { body: e.target.value })}
-                              onFocus={() => setFocusedId(step.id)}
-                              onBlur={() => setFocusedId(null)}
-                              placeholder="Legenda da imagem (opcional)... Use {nome}, {variavel}"
-                              className="w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 resize-none focus:outline-none leading-relaxed border border-slate-200 dark:border-white/[0.07] rounded-lg px-3 py-2 max-h-24 overflow-y-auto"
-                            />
+                            <div className="border border-slate-200 dark:border-white/[0.07] rounded-lg px-3 py-2">
+                              <RichScriptEditor
+                                ref={(el) => { editorRefs.current[step.id] = el }}
+                                value={step.body}
+                                onChange={(val) => updateStep(step.id, { body: val })}
+                                placeholder="Legenda da imagem (opcional)... Use {nome}, {variavel}"
+                                expanded={false}
+                                onFocus={() => setFocusedId(step.id)}
+                                onBlur={() => setFocusedId(null)}
+                              />
+                            </div>
                           </div>
                         </div>
                       )}
@@ -1067,46 +1011,23 @@ export function ScriptBuilderPage({ template }: Props) {
                           </AnimatePresence>
                         </div>
 
-                        {/* Edit spintax — appears when cursor is inside a {[...|...]} block */}
-                        <AnimatePresence>
-                          {cursorSpintax[step.id] && (
-                            <motion.div
-                              key="edit-spintax"
-                              initial={{ opacity: 0, scale: 0.85 }}
-                              animate={{ opacity: 1, scale: 1 }}
-                              exit={{ opacity: 0, scale: 0.85 }}
-                              transition={{ duration: 0.12 }}
-                              className="relative"
-                            >
-                              <button
-                                onClick={() => {
-                                  setEditingSpintax({ stepId: step.id, ...cursorSpintax[step.id]! })
-                                  setSpintaxPickerStepId(null)
-                                  setVarPickerStepId(null)
+                        {/* Edit spintax chip — triggered by clicking ⚡ chip in the editor */}
+                        <div className="relative">
+                          <AnimatePresence>
+                            {editingChip?.stepId === step.id && (
+                              <SpintaxPicker
+                                stepId={step.id}
+                                listVars={listVars}
+                                initialOptions={editingChip.options}
+                                onInsert={(sid, text) => {
+                                  editingChip.replace(text)
+                                  setEditingChip(null)
                                 }}
-                                className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border bg-amber-50 dark:bg-amber-500/10 border-amber-300 dark:border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
-                              >
-                                <Shuffle className="w-3 h-3" />
-                                Editar variação
-                              </button>
-                              <AnimatePresence>
-                                {editingSpintax?.stepId === step.id && (
-                                  <SpintaxPicker
-                                    stepId={step.id}
-                                    listVars={listVars}
-                                    initialOptions={editingSpintax.options}
-                                    replaceRange={{ start: editingSpintax.start, end: editingSpintax.end }}
-                                    onInsert={(sid, text, range) => {
-                                      insertAtCursor(sid, text, range)
-                                      setEditingSpintax(null)
-                                    }}
-                                    onClose={() => setEditingSpintax(null)}
-                                  />
-                                )}
-                              </AnimatePresence>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
+                                onClose={() => setEditingChip(null)}
+                              />
+                            )}
+                          </AnimatePresence>
+                        </div>
 
                         {/* Variable picker trigger */}
                         <div className="relative">
@@ -1176,12 +1097,7 @@ export function ScriptBuilderPage({ template }: Props) {
                           title={"Lista  - item1&#10;- item2"}
                           onMouseDown={(e) => {
                             e.preventDefault()
-                            const el = textareaRefs.current[step.id]
-                            if (!el) return
-                            const pos = el.selectionStart
-                            const before = step.body.slice(0, pos)
-                            const prefix = before.length > 0 && !before.endsWith("\n") ? "\n" : ""
-                            insertAtCursor(step.id, `${prefix}- `, { start: pos, end: pos })
+                            editorRefs.current[step.id]?.insertListItem()
                           }}
                           className="p-1.5 rounded-md text-slate-400 dark:text-slate-600 hover:text-slate-700 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
                         >
@@ -1192,58 +1108,38 @@ export function ScriptBuilderPage({ template }: Props) {
                         </span>
                       </div>
 
-                      {/* Textarea */}
-                      {(() => {
-                        const isExpanded = !!expandedSteps[step.id]
-                        return (
-                          <div className="relative group/textarea">
-                            <textarea
-                              ref={(el) => { textareaRefs.current[step.id] = el }}
-                              value={step.body}
-                              onChange={(e) => {
-                                updateStep(step.id, { body: e.target.value })
-                                if (isExpanded) {
-                                  e.target.style.height = "auto"
-                                  e.target.style.height = e.target.scrollHeight + "px"
-                                }
-                                setCursorSpintax((prev) => ({
-                                  ...prev,
-                                  [step.id]: findSpintaxAtCursor(e.target.value, e.target.selectionStart),
-                                }))
-                              }}
-                              onSelect={(e) => {
-                                const el = e.currentTarget
-                                setCursorSpintax((prev) => ({
-                                  ...prev,
-                                  [step.id]: findSpintaxAtCursor(el.value, el.selectionStart),
-                                }))
-                              }}
-                              onFocus={() => setFocusedId(step.id)}
-                              onBlur={() => setFocusedId(null)}
-                              placeholder={`Mensagem do passo ${index + 1}... Use {nome}, {nome_completo} ou clique em Variação para alternar textos`}
-                              className={`w-full bg-transparent text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-700 resize-none focus:outline-none leading-relaxed transition-all duration-200 ${
-                                isExpanded
-                                  ? "min-h-[240px]"
-                                  : "max-h-[130px] overflow-y-auto"
-                              }`}
-                              style={{ minHeight: isExpanded ? undefined : 88 }}
-                            />
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setExpandedSteps((prev) => ({ ...prev, [step.id]: !isExpanded }))
-                              }
-                              title={isExpanded ? "Recolher" : "Expandir"}
-                              className="absolute bottom-1 right-1 p-1 rounded-md opacity-0 group-hover/textarea:opacity-100 focus:opacity-100 transition-opacity text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06]"
-                            >
-                              {isExpanded
-                                ? <Minimize2 className="w-3 h-3" />
-                                : <Maximize2 className="w-3 h-3" />
-                              }
-                            </button>
-                          </div>
-                        )
-                      })()}
+                      {/* Rich editor */}
+                      <div className="relative group/textarea">
+                        <RichScriptEditor
+                          ref={(el) => { editorRefs.current[step.id] = el }}
+                          value={step.body}
+                          onChange={(val) => updateStep(step.id, { body: val })}
+                          onSpintaxChipClick={(raw, replace) => {
+                            const inner = raw.slice(2, -2)
+                            const options = inner.split("|").map((s) => s.trim()).filter(Boolean)
+                            setEditingChip({ stepId: step.id, options, replace })
+                            setSpintaxPickerStepId(null)
+                            setVarPickerStepId(null)
+                          }}
+                          placeholder={`Mensagem do passo ${index + 1}... Use {nome}, {nome_completo} ou clique em Variação para alternar textos`}
+                          expanded={!!expandedSteps[step.id]}
+                          onFocus={() => setFocusedId(step.id)}
+                          onBlur={() => setFocusedId(null)}
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedSteps((prev) => ({ ...prev, [step.id]: !expandedSteps[step.id] }))
+                          }
+                          title={expandedSteps[step.id] ? "Recolher" : "Expandir"}
+                          className="absolute bottom-1 right-1 p-1 rounded-md opacity-0 group-hover/textarea:opacity-100 focus:opacity-100 transition-opacity text-slate-400 dark:text-slate-600 hover:text-slate-600 dark:hover:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/[0.06]"
+                        >
+                          {expandedSteps[step.id]
+                            ? <Minimize2 className="w-3 h-3" />
+                            : <Maximize2 className="w-3 h-3" />
+                          }
+                        </button>
+                      </div>
 
                       </>}
 
