@@ -71,8 +71,10 @@ function uid(): string {
 }
 
 const QUICK_TAGS = [
+  { label: "{saudacao}", value: "{saudacao}" },
   { label: "{nome}", value: "{nome}" },
   { label: "{nome_completo}", value: "{nome_completo}" },
+  { label: "{primeiro_nome}", value: "{primeiro_nome}" },
   { label: "{telefone}", value: "{telefone}" },
 ]
 
@@ -275,6 +277,7 @@ function SpintaxPicker({
   const [options, setOptions] = useState(initialOptions ?? ["", ""])
   const [previewIdx, setPreviewIdx] = useState(0)
   const [focusedOptIdx, setFocusedOptIdx] = useState(0)
+  const [varSearch, setVarSearch] = useState("")
   const containerRef = useRef<HTMLDivElement>(null)
   const optionRefs = useRef<Array<HTMLTextAreaElement | null>>([])
 
@@ -303,6 +306,10 @@ function SpintaxPicker({
       l.variables.map((v) => ({ label: `{${v}}`, value: `{${v}}` }))
     ),
   ]
+
+  const filteredVarChips = varSearch.trim()
+    ? allVarChips.filter((c) => c.label.toLowerCase().includes(varSearch.toLowerCase()))
+    : allVarChips
 
   // Insert a variable at the cursor of the currently focused option textarea
   const insertVarIntoOption = (variable: string) => {
@@ -364,11 +371,31 @@ function SpintaxPicker({
 
       {/* Variable chips — insert into the focused option */}
       <div className="px-3 pt-2.5 pb-2 border-b border-slate-100 dark:border-white/5">
-        <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-wider mb-1.5">
-          Inserir na opção {focusedOptIdx + 1}:
-        </p>
+        <div className="flex items-center gap-2 mb-1.5">
+          <p className="text-[9px] font-semibold text-slate-400 dark:text-slate-600 uppercase tracking-wider shrink-0">
+            Inserir na opção {focusedOptIdx + 1}:
+          </p>
+          <div className="flex-1 flex items-center gap-1 bg-slate-100 dark:bg-white/[0.05] border border-slate-200 dark:border-white/[0.06] rounded-md px-1.5 py-0.5 min-w-0">
+            <Search className="w-2.5 h-2.5 text-slate-400 dark:text-slate-600 shrink-0" />
+            <input
+              type="text"
+              value={varSearch}
+              onChange={(e) => setVarSearch(e.target.value)}
+              placeholder="buscar variável..."
+              className="flex-1 bg-transparent text-[10px] text-slate-800 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-600 focus:outline-none min-w-0"
+            />
+            {varSearch && (
+              <button
+                onMouseDown={(e) => { e.preventDefault(); setVarSearch("") }}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors shrink-0"
+              >
+                <X className="w-2.5 h-2.5" />
+              </button>
+            )}
+          </div>
+        </div>
         <div className="flex flex-wrap gap-1 max-h-16 overflow-y-auto">
-          {allVarChips.map((chip) => (
+          {filteredVarChips.length > 0 ? filteredVarChips.map((chip) => (
             <button
               key={chip.value}
               onMouseDown={(e) => { e.preventDefault(); insertVarIntoOption(chip.value) }}
@@ -376,7 +403,11 @@ function SpintaxPicker({
             >
               {chip.label}
             </button>
-          ))}
+          )) : (
+            <p className="text-[10px] text-slate-400 dark:text-slate-600 py-1">
+              Nenhuma variável encontrada
+            </p>
+          )}
         </div>
       </div>
 
