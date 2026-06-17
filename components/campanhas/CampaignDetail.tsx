@@ -435,9 +435,11 @@ function FailedRow({ msg }: { msg: FailedMessage }) {
 
 function NextSendCard({
   nextPending,
+  activeSending,
   onSkip,
 }: {
   nextPending: NextPending
+  activeSending: SentMessage | null
   onSkip: (messageId: string) => Promise<void>
 }) {
   const [secs, setSecs] = useState<number | null>(null)
@@ -460,6 +462,38 @@ function NextSendCard({
     const id = setInterval(update, 1000)
     return () => { clearInterval(id); totalRef.current = null }
   }, [nextPending?.nextSendAt])
+
+  // Mid-sequence state: a lead is actively sending its script steps
+  if (!nextPending && activeSending) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        className="rounded-xl border border-blue-200 dark:border-blue-500/20 bg-blue-50 dark:bg-blue-500/[0.07] p-5"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-500/20 flex items-center justify-center shrink-0">
+            <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold text-blue-500 dark:text-blue-400 uppercase tracking-wide">
+              Enviando sequência · passo {activeSending.currentStep - 1}
+            </p>
+            <p className="text-sm font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
+              {activeSending.contact.name ?? fmtPhone(activeSending.contact.phone)}
+            </p>
+            <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+              {fmtPhone(activeSending.contact.phone)}
+            </p>
+          </div>
+          <span className="text-sm font-bold text-blue-500 animate-pulse shrink-0">
+            Em andamento
+          </span>
+        </div>
+      </motion.div>
+    )
+  }
 
   if (!nextPending) return null
 
@@ -1502,14 +1536,19 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
       {/* Only show when the worker can actually dispatch:
           in-window, OR force dispatch active, OR no schedule rules (24/7) */}
       <AnimatePresence>
-        {isRunning && data.nextPending &&
-          (data.estimate?.inWindow || data.forceDispatch || data.scheduleRules.length === 0) && (
-          <NextSendCard
-            key={data.nextPending.id}
-            nextPending={data.nextPending}
-            onSkip={sendNow}
-          />
-        )}
+        {isRunning &&
+          (data.estimate?.inWindow || data.forceDispatch || data.scheduleRules.length === 0) && (() => {
+            const activeSending = data.sentMessages.find(m => m.status === "SENDING") ?? null
+            if (!data.nextPending && !activeSending) return null
+            return (
+              <NextSendCard
+                key={data.nextPending?.id ?? activeSending?.id}
+                nextPending={data.nextPending}
+                activeSending={activeSending}
+                onSkip={sendNow}
+              />
+            )
+          })()}
       </AnimatePresence>
 
       {/* ── Progress + Tabbed Logs ────────────────────────────────────────── */}
