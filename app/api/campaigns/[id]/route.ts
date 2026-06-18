@@ -77,13 +77,15 @@ export async function GET(
     pending,
   })
 
-  // Real delivery/read counts from ack events
-  const [deliveredCount, readCount] = await Promise.all([
+  const [deliveredCount, readCount, repliedCount] = await Promise.all([
     prisma.campaignMessage.count({
       where: { campaignId: id, ackStatus: { gte: 2 } },
     }),
     prisma.campaignMessage.count({
       where: { campaignId: id, ackStatus: { gte: 3 } },
+    }),
+    prisma.campaignMessage.count({
+      where: { campaignId: id, replied: true },
     }),
   ])
 
@@ -100,6 +102,7 @@ export async function GET(
       completed: counts["COMPLETED"] ?? 0,
       delivered: deliveredCount,
       read: readCount,
+      replied: repliedCount,
     },
     estimate,
     queueMessages: queueMessages.map((m) => ({

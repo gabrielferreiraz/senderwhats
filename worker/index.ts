@@ -671,27 +671,38 @@ async function tick(): Promise<void> {
           continue
         }
 
+        // ── Mid-sequence check: query before window so we can bypass it ────────
+        // A lead already mid-sequence (SENDING) must finish regardless of window.
+        const activeSendingEarly = await prisma.campaignMessage.findFirst({
+          where: { campaignId: campaign.id, status: "SENDING", replied: false },
+          select: { id: true, currentStep: true },
+        })
+
         // ── Schedule window check (Brasília time, midnight-crossing safe) ────
         if (!isInWindow(campaign.scheduleRules, day, hhmm)) {
-          // Re-read forceDispatch directly from DB — avoids stale Prisma client
-          // cache if the worker was started before prisma generate ran.
-          let forceDispatch = campaign.forceDispatch
-          if (forceDispatch === undefined || forceDispatch === null) {
-            try {
-              const fresh = await prisma.campaign.findUnique({
-                where: { id: campaign.id },
-                select: { forceDispatch: true },
-              })
-              forceDispatch = fresh?.forceDispatch ?? false
-            } catch {
-              forceDispatch = false
+          if (activeSendingEarly) {
+            // Sequence already started — finish it regardless of window
+            log("📨", `"${campaign.name}" fora da janela mas continuando sequência ativa (passo ${activeSendingEarly.currentStep})`)
+          } else {
+            // No active sequence — respect the window
+            let forceDispatch = campaign.forceDispatch
+            if (forceDispatch === undefined || forceDispatch === null) {
+              try {
+                const fresh = await prisma.campaign.findUnique({
+                  where: { id: campaign.id },
+                  select: { forceDispatch: true },
+                })
+                forceDispatch = fresh?.forceDispatch ?? false
+              } catch {
+                forceDispatch = false
+              }
             }
+            if (!forceDispatch) {
+              log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
+              continue
+            }
+            log("⚡", `"${campaign.name}" forçando disparos fora da janela (${hhmm})`)
           }
-          if (!forceDispatch) {
-            log("⏰", `"${campaign.name}" fora da janela de envio (${hhmm}) — aguardando`)
-            continue
-          }
-          log("⚡", `"${campaign.name}" forçando disparos fora da janela (${hhmm})`)
         }
 
         // ── Global daily send limit for this campaign ────────────────────────
@@ -745,12 +756,11 @@ async function tick(): Promise<void> {
         //   2. Else if a between-leads delay is still active (PENDING with future
         //      nextSendAt) → block: do not start another lead yet
         //   3. Else → start the next PENDING lead (take: 1)
-        const activeSending = await prisma.campaignMessage.findFirst({
-          where: { campaignId: campaign.id, status: "SENDING" },
-        })
+        // activeSendingEarly already queried above for the window bypass check.
+        const activeSending = activeSendingEarly
 
         const scheduledNext = activeSending ? null : await prisma.campaignMessage.findFirst({
-          where: { campaignId: campaign.id, status: "PENDING", nextSendAt: { gt: new Date() } },
+          where: { campaignId: campaign.id, status: "PENDING", replied: false, nextSendAt: { gt: new Date() } },
         })
 
         const messages = scheduledNext
@@ -760,6 +770,7 @@ async function tick(): Promise<void> {
                 where: {
                   campaignId: campaign.id,
                   status: "SENDING",
+                  replied: false,
                   OR: [{ nextSendAt: null }, { nextSendAt: { lte: new Date() } }],
                 },
                 orderBy: { nextSendAt: "asc" },
@@ -768,6 +779,7 @@ async function tick(): Promise<void> {
                 where: {
                   campaignId: campaign.id,
                   status: "PENDING",
+                  replied: false,
                   OR: [{ nextSendAt: null }, { nextSendAt: { lte: new Date() } }],
                 },
                 take: 1,

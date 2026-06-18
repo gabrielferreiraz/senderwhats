@@ -118,21 +118,6 @@ export async function POST(req: NextRequest) {
 
   console.log("[webhook/whatsapp] 👤 Contato:", contact ? `encontrado (${contact.phone})` : "não encontrado")
 
-  // Busca o lead de remarketing pelas variantes do número
-  const rmktLead = await prisma.remarketingLead.findFirst({
-    where: {
-      number: { in: variants },
-      status: "pending",
-      replied: false,
-      ...(vendedor ? { userId: vendedor.userId } : {}),
-    },
-    select: { id: true, number: true, userId: true },
-  })
-
-  console.log("[webhook/whatsapp] 📋 RemarketingLead:", rmktLead
-    ? `encontrado (${rmktLead.number}, userId=${rmktLead.userId})`
-    : "não encontrado")
-
   const tasks: Promise<unknown>[] = []
 
   if (contact && vendedor) {
@@ -141,21 +126,25 @@ export async function POST(req: NextRequest) {
         contactId: contact.id,
         replied: false,
         campaign: { vendedorId: vendedor.id },
-        status: { in: ["SENT", "COMPLETED", "SENDING"] },
+        status: { in: ["PENDING", "SENDING", "SENT", "COMPLETED"] },
       },
       data: { replied: true, repliedAt: now },
     })
     console.log("[webhook/whatsapp] 📨 CampaignMessages marcados como replied:", result.count)
   }
 
-  if (rmktLead) {
-    tasks.push(
-      prisma.remarketingLead.update({
-        where: { id: rmktLead.id },
-        data: { replied: true, repliedAt: now, status: "completed" },
-      })
-    )
-    console.log("[webhook/whatsapp] 🛑 RemarketingLead marcado como replied + completed")
+  // Marca TODOS os leads de remarketing pendentes desse número como respondidos
+  const rmktResult = await prisma.remarketingLead.updateMany({
+    where: {
+      number: { in: variants },
+      status: "pending",
+      replied: false,
+      ...(vendedor ? { userId: vendedor.userId } : {}),
+    },
+    data: { replied: true, repliedAt: now, status: "completed" },
+  })
+  if (rmktResult.count > 0) {
+    console.log("[webhook/whatsapp] 🛑 RemarketingLeads marcados como replied + completed:", rmktResult.count)
   }
 
   if (tasks.length > 0) await Promise.all(tasks)
@@ -164,7 +153,7 @@ export async function POST(req: NextRequest) {
     ok: true,
     vendedor: vendedor?.userId ?? null,
     contact: !!contact,
-    lead: !!rmktLead,
+    lead: rmktResult.count > 0,
   }
   console.log("[webhook/whatsapp] ✅ Processado:", response)
   return NextResponse.json(response)

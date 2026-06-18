@@ -45,6 +45,7 @@ type Counts = {
   completed: number
   delivered: number
   read: number
+  replied: number
 }
 
 type QueueMessage = {
@@ -1475,6 +1476,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
         if (dispatched === 0) return null
         const pctDelivered = dispatched > 0 ? Math.round((counts.delivered / dispatched) * 100) : 0
         const pctRead      = dispatched > 0 ? Math.round((counts.read      / dispatched) * 100) : 0
+        const pctReplied   = dispatched > 0 ? Math.round((counts.replied   / dispatched) * 100) : 0
         return (
           <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -1484,7 +1486,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 <span className="text-[10px] text-slate-400 ml-auto">Aguardando confirmações do WhatsApp</span>
               )}
             </div>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               {/* Disparados */}
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-[10px] text-slate-500">
@@ -1520,6 +1522,19 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 </div>
                 <p className={`text-lg font-bold tabular-nums ${hasAckData ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>
                   {hasAckData ? counts.read.toLocaleString("pt-BR") : "—"}
+                </p>
+              </div>
+              {/* Responderam */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center justify-between text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1"><MessageCircle className="w-3 h-3" />Responderam</span>
+                  <span className={`font-semibold ${counts.replied > 0 ? "text-amber-600 dark:text-amber-400" : "text-slate-400"}`}>{pctReplied}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-amber-100 dark:bg-amber-500/20">
+                  <div className="h-full rounded-full bg-amber-500 transition-all duration-700" style={{ width: `${pctReplied}%` }} />
+                </div>
+                <p className={`text-lg font-bold tabular-nums ${counts.replied > 0 ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>
+                  {counts.replied > 0 ? counts.replied.toLocaleString("pt-BR") : "—"}
                 </p>
               </div>
             </div>
