@@ -46,6 +46,7 @@ type Counts = {
   delivered: number
   read: number
   replied: number
+  repliedViaRemarketing: number
 }
 
 type QueueMessage = {
@@ -882,6 +883,57 @@ function EstimatePanel({ estimate, pending }: { estimate: ScheduleEstimate; pend
   )
 }
 
+// ─── Next Remarketing Card ────────────────────────────────────────────────────
+
+function NextRmktCard({ lead }: { lead: RmktLead }) {
+  const secs = useCountdown(lead.nextRun)
+  const isFiring = secs !== null && secs <= 0
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className="rounded-xl border border-teal-200 dark:border-teal-500/20 bg-teal-50 dark:bg-teal-500/[0.07] p-4"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-teal-100 dark:bg-teal-500/20 flex items-center justify-center shrink-0">
+          {isFiring ? (
+            <Loader2 className="w-4 h-4 text-teal-500 animate-spin" />
+          ) : (
+            <Repeat className="w-4 h-4 text-teal-500" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] font-semibold text-teal-500 dark:text-teal-400 uppercase tracking-wide">
+            {isFiring ? "Enviando follow-up..." : `Próximo follow-up · ${lead.currentStep}º passo`}
+          </p>
+          <p className="text-sm font-semibold text-slate-900 dark:text-white mt-0.5 truncate">
+            {lead.name ?? fmtPhone(lead.number)}
+          </p>
+          <p className="text-[10px] font-mono text-slate-400 mt-0.5">
+            {fmtPhone(lead.number)}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          {isFiring ? (
+            <span className="text-sm font-bold text-teal-500 animate-pulse">Disparando...</span>
+          ) : secs !== null && secs > 0 ? (
+            <>
+              <p className="text-xl font-bold tabular-nums leading-none text-teal-600 dark:text-teal-400">
+                {fmtCountdown(secs)}
+              </p>
+              <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-0.5">até o envio</p>
+            </>
+          ) : (
+            <Loader2 className="w-4 h-4 text-teal-400 animate-spin" />
+          )}
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 // ─── Remarketing Section ──────────────────────────────────────────────────────
 
 type RmktLead = {
@@ -951,6 +1003,8 @@ function RemarketingSection({
 
   const pending = useMemo(() => leads.filter((l) => l.status === "pending").length, [leads])
   const replied = useMemo(() => leads.filter((l) => l.replied).length, [leads])
+  // Leads já vêm ordenados por nextRun asc da API — o primeiro pending é o próximo a disparar
+  const nextPendingLead = useMemo(() => leads.find((l) => l.status === "pending") ?? null, [leads])
 
   return (
     <div className="rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden">
@@ -1005,6 +1059,15 @@ function RemarketingSection({
           )}
         </div>
       </div>
+
+      {/* Next remarketing dispatch countdown */}
+      <AnimatePresence>
+        {!loading && !error && nextPendingLead && (
+          <div className="px-5 pt-4">
+            <NextRmktCard lead={nextPendingLead} />
+          </div>
+        )}
+      </AnimatePresence>
 
       {loading ? (
         <div className="flex items-center justify-center py-10">
@@ -1536,6 +1599,13 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 <p className={`text-lg font-bold tabular-nums ${counts.replied > 0 ? "text-slate-900 dark:text-white" : "text-slate-400"}`}>
                   {counts.replied > 0 ? counts.replied.toLocaleString("pt-BR") : "—"}
                 </p>
+                {counts.replied > 0 && counts.repliedViaRemarketing > 0 && (
+                  <p className="text-[9px] text-slate-400 dark:text-slate-600 leading-tight -mt-1">
+                    {(counts.replied - counts.repliedViaRemarketing).toLocaleString("pt-BR")} direto
+                    {" · "}
+                    {counts.repliedViaRemarketing.toLocaleString("pt-BR")} follow-up
+                  </p>
+                )}
               </div>
             </div>
           </div>

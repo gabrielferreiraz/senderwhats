@@ -14,9 +14,11 @@ import {
   ExternalLink,
   CalendarClock,
   Copy,
+  Repeat,
 } from "lucide-react"
 
 type CampaignStatus = "DRAFT" | "SCHEDULED" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED"
+type DisplayStatus = CampaignStatus | "FOLLOWUP"
 
 type Campaign = {
   id: string
@@ -27,12 +29,12 @@ type Campaign = {
   vendedor: { nome: string; userId: string }
   list: { name: string } | null
   template: { name: string } | null
-  _stats: { sent: number; pending: number; failed: number; total: number }
+  _stats: { sent: number; pending: number; failed: number; total: number; pendingRmkt: number }
 }
 
 const STATUS_CFG: Record<
-  CampaignStatus,
-  { label: string; bg: string; text: string; dot: string; pulse?: boolean }
+  DisplayStatus,
+  { label: string; bg: string; text: string; dot: string; pulse?: boolean; icon?: React.ElementType }
 > = {
   DRAFT:      { label: "Rascunho",  bg: "bg-slate-100 dark:bg-slate-500/10",   text: "text-slate-500",                     dot: "bg-slate-400 dark:bg-slate-500" },
   SCHEDULED:  { label: "Agendado",  bg: "bg-blue-50 dark:bg-blue-500/10",      text: "text-blue-600 dark:text-blue-400",    dot: "bg-blue-500" },
@@ -40,19 +42,34 @@ const STATUS_CFG: Record<
   PAUSED:     { label: "Pausado",   bg: "bg-amber-50 dark:bg-amber-500/10",    text: "text-amber-600 dark:text-amber-400",  dot: "bg-amber-400" },
   COMPLETED:  { label: "Concluído", bg: "bg-emerald-50 dark:bg-emerald-500/10",text: "text-emerald-600 dark:text-emerald-400",dot: "bg-emerald-500" },
   FAILED:     { label: "Falhou",    bg: "bg-rose-50 dark:bg-rose-500/10",      text: "text-rose-600 dark:text-rose-400",    dot: "bg-rose-500" },
+  FOLLOWUP:   { label: "Follow-up", bg: "bg-teal-50 dark:bg-teal-500/10",      text: "text-teal-600 dark:text-teal-400",    dot: "bg-teal-500", pulse: true, icon: Repeat },
 }
 
-function StatusBadge({ status }: { status: CampaignStatus }) {
-  const cfg = STATUS_CFG[status]
+function getDisplayStatus(c: Campaign): DisplayStatus {
+  if (c.status === "COMPLETED" && c._stats.pendingRmkt > 0) return "FOLLOWUP"
+  return c.status
+}
+
+function StatusBadge({ campaign }: { campaign: Campaign }) {
+  const ds = getDisplayStatus(campaign)
+  const cfg = STATUS_CFG[ds]
+  const Icon = cfg.icon
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold ${cfg.bg} ${cfg.text}`}>
-      <span className="relative flex h-1.5 w-1.5">
-        {cfg.pulse && (
-          <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-75`} />
-        )}
-        <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${cfg.dot}`} />
-      </span>
+      {Icon ? (
+        <Icon className="w-3 h-3" />
+      ) : (
+        <span className="relative flex h-1.5 w-1.5">
+          {cfg.pulse && (
+            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${cfg.dot} opacity-75`} />
+          )}
+          <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${cfg.dot}`} />
+        </span>
+      )}
       {cfg.label}
+      {ds === "FOLLOWUP" && (
+        <span className="opacity-60">· {campaign._stats.pendingRmkt}</span>
+      )}
     </span>
   )
 }
@@ -182,7 +199,7 @@ export function CampaignsList({ initial }: Props) {
                         </p>
                       )}
                     </div>
-                    <StatusBadge status={c.status} />
+                    <StatusBadge campaign={c} />
                   </div>
 
                   {/* Progress */}
@@ -194,7 +211,8 @@ export function CampaignsList({ initial }: Props) {
                           animate={{ width: `${progress}%` }}
                           transition={{ duration: 0.5, ease: "easeOut" }}
                           className={`h-full rounded-full ${
-                            c.status === "COMPLETED" ? "bg-emerald-500"
+                            getDisplayStatus(c) === "FOLLOWUP" ? "bg-teal-500"
+                            : c.status === "COMPLETED" ? "bg-emerald-500"
                             : c.status === "FAILED" ? "bg-rose-500"
                             : "bg-violet-500"
                           }`}

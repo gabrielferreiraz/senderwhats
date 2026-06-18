@@ -4,7 +4,7 @@ import { CampaignsList } from "@/components/campanhas/CampaignsList"
 export const dynamic = "force-dynamic"
 
 export default async function CampanhasPage() {
-  const [campaigns, messageCounts] = await Promise.all([
+  const [campaigns, messageCounts, rmktPendingCounts] = await Promise.all([
     prisma.campaign.findMany({
       orderBy: { createdAt: "desc" },
       include: {
@@ -18,12 +18,22 @@ export default async function CampanhasPage() {
       by: ["campaignId", "status"],
       _count: { _all: true },
     }),
+    prisma.remarketingLead.groupBy({
+      by: ["campaignId"],
+      where: { status: "pending", campaignId: { not: null } },
+      _count: { _all: true },
+    }),
   ])
 
   const statsMap = new Map<string, Record<string, number>>()
   for (const row of messageCounts) {
     if (!statsMap.has(row.campaignId)) statsMap.set(row.campaignId, {})
     statsMap.get(row.campaignId)![row.status] = row._count._all
+  }
+
+  const rmktMap = new Map<string, number>()
+  for (const row of rmktPendingCounts) {
+    if (row.campaignId) rmktMap.set(row.campaignId, row._count._all)
   }
 
   const serialized = campaigns.map((c) => {
@@ -37,6 +47,7 @@ export default async function CampanhasPage() {
         pending: stats["PENDING"] ?? 0,
         failed: stats["FAILED"] ?? 0,
         total: c._count.messages,
+        pendingRmkt: rmktMap.get(c.id) ?? 0,
       },
     }
   })

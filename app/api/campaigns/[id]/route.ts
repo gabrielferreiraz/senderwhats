@@ -77,7 +77,7 @@ export async function GET(
     pending,
   })
 
-  const [deliveredCount, readCount, repliedCount] = await Promise.all([
+  const [deliveredCount, readCount, repliedCount, repliedViaRemarketingCount] = await Promise.all([
     prisma.campaignMessage.count({
       where: { campaignId: id, ackStatus: { gte: 2 } },
     }),
@@ -86,6 +86,9 @@ export async function GET(
     }),
     prisma.campaignMessage.count({
       where: { campaignId: id, replied: true },
+    }),
+    prisma.campaignMessage.count({
+      where: { campaignId: id, repliedViaRemarketing: true },
     }),
   ])
 
@@ -103,6 +106,7 @@ export async function GET(
       delivered: deliveredCount,
       read: readCount,
       replied: repliedCount,
+      repliedViaRemarketing: repliedViaRemarketingCount,
     },
     estimate,
     queueMessages: queueMessages.map((m) => ({

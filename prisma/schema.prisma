@@ -140,8 +140,9 @@ model CampaignMessage {
   templateId    String?
   whatsappMsgId String?
   sentAt        DateTime?
-  replied       Boolean   @default(false)
-  repliedAt     DateTime?
+  replied               Boolean   @default(false)
+  repliedAt             DateTime?
+  repliedViaRemarketing Boolean   @default(false)
   ackStatus        Int        @default(0)  // 0=unknown 1=sent 2=delivered 3=read
   failureReason    String?
   failureCategory  String?    // "no_whatsapp" | "session_error" | "timeout" | "unknown"

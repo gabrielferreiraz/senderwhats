@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { MessageStatus } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
@@ -120,17 +121,57 @@ export async function POST(req: NextRequest) {
 
   const tasks: Promise<unknown>[] = []
 
+  // Descobre quais campanhas têm remarketing pendente para esse número ANTES de marcá-las
+  // Isso permite atribuir corretamente: quem respondeu ao follow-up vs à mensagem original
+  const pendingRmktLeads = vendedor
+    ? await prisma.remarketingLead.findMany({
+        where: {
+          number: { in: variants },
+          status: "pending",
+          replied: false,
+          userId: vendedor.userId,
+        },
+        select: { campaignId: true },
+      })
+    : []
+
+  const rmktCampaignIds = pendingRmktLeads
+    .map((l) => l.campaignId)
+    .filter((id): id is string => id !== null)
+
   if (contact && vendedor) {
-    const result = await prisma.campaignMessage.updateMany({
-      where: {
-        contactId: contact.id,
-        replied: false,
-        campaign: { vendedorId: vendedor.id },
-        status: { in: ["PENDING", "SENDING", "SENT", "COMPLETED"] },
-      },
-      data: { replied: true, repliedAt: now },
-    })
-    console.log("[webhook/whatsapp] 📨 CampaignMessages marcados como replied:", result.count)
+    const baseWhere = {
+      contactId: contact.id,
+      replied: false,
+      campaign: { vendedorId: vendedor.id },
+      status: { in: ["PENDING", "SENDING", "SENT", "COMPLETED"] as MessageStatus[] },
+    }
+
+    let total = 0
+    if (rmktCampaignIds.length > 0) {
+      // Respondeu ao follow-up: campanha com remarketing pendente
+      const r1 = await prisma.campaignMessage.updateMany({
+        where: { ...baseWhere, campaignId: { in: rmktCampaignIds } },
+        data: { replied: true, repliedAt: now, repliedViaRemarketing: true },
+      })
+      // Respondeu diretamente: demais campanhas ativas desse vendedor
+      const r2 = await prisma.campaignMessage.updateMany({
+        where: { ...baseWhere, campaignId: { notIn: rmktCampaignIds } },
+        data: { replied: true, repliedAt: now },
+      })
+      total = r1.count + r2.count
+    } else {
+      const r = await prisma.campaignMessage.updateMany({
+        where: baseWhere,
+        data: { replied: true, repliedAt: now },
+      })
+      total = r.count
+    }
+    console.log(
+      "[webhook/whatsapp] 📨 CampaignMessages marcados como replied:",
+      total,
+      rmktCampaignIds.length > 0 ? `(${rmktCampaignIds.length} via remarketing)` : "(direto)"
+    )
   }
 
   // Marca TODOS os leads de remarketing pendentes desse número como respondidos
