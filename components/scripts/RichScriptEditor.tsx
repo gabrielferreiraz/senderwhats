@@ -28,7 +28,7 @@ const VAR_CHIP_CLASS =
   "inline-flex items-center mx-0.5 px-1.5 rounded align-middle bg-violet-100 dark:bg-violet-500/[0.18] text-violet-700 dark:text-violet-300 text-[11px] font-mono font-semibold select-none border border-violet-200 dark:border-violet-500/30"
 
 const SPINTAX_CHIP_CLASS =
-  "inline-flex items-center gap-1 mx-0.5 px-1.5 rounded align-middle bg-amber-100 dark:bg-amber-500/[0.18] text-amber-700 dark:text-amber-300 text-[11px] font-medium select-none border border-amber-200 dark:border-amber-500/30 cursor-pointer hover:bg-amber-200 dark:hover:bg-amber-500/30 transition-colors"
+  "inline-flex items-center gap-1.5 mx-0.5 px-2 py-px rounded-md align-middle bg-amber-50 dark:bg-amber-500/[0.12] text-amber-800 dark:text-amber-300 text-[11px] font-medium select-none border border-amber-200 dark:border-amber-500/25 cursor-pointer hover:bg-amber-100 dark:hover:bg-amber-500/22 transition-colors"
 
 function makeVarChip(raw: string): HTMLSpanElement {
   const label = raw.slice(1, -1)
@@ -48,7 +48,11 @@ function makeSpintaxChip(raw: string): HTMLSpanElement {
   const inner = raw.slice(2, -2) // remove {[ and ]}
   const options = inner.split("|")
   const count = options.length
-  const preview = options[0]?.trim().slice(0, 22) ?? ""
+  // Replace newlines with spaces so multi-line options show cleanly in the chip preview
+  const firstOption = options[0]?.trim().replace(/\n+/g, " ") ?? ""
+  const preview = firstOption.slice(0, 24)
+  const truncated = firstOption.length > 24
+
   const el = document.createElement("span")
   el.contentEditable = "false"
   el.dataset.chip = "spintax"
@@ -57,10 +61,11 @@ function makeSpintaxChip(raw: string): HTMLSpanElement {
   el.style.verticalAlign = "-0.12em"
   el.style.lineHeight = "1.6"
   el.title = options.map((o, i) => `${i + 1}. ${o.trim()}`).join("\n")
-  const labelText = count === 1
-    ? `⚡ ${preview}`
-    : `⚡ ${preview}${preview.length >= 22 ? "…" : ""} +${count - 1}`
-  el.textContent = labelText
+
+  // Count badge + preview text — no lightning bolt, just clear information
+  el.innerHTML =
+    `<span style="font-size:0.78em;font-weight:700;opacity:0.55;background:rgba(180,83,9,0.12);border-radius:3px;padding:0 3px;flex-shrink:0">${count}×</span>` +
+    `<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:130px">${preview}${truncated ? "…" : ""}</span>`
   return el
 }
 
@@ -94,28 +99,28 @@ function deserialize(container: HTMLElement, raw: string): void {
   container.innerHTML = ""
   if (!raw) return
 
-  const lines = raw.split("\n")
-  for (let li = 0; li < lines.length; li++) {
-    if (li > 0) container.appendChild(document.createElement("br"))
-
-    const line = lines[li]!
-    let last = 0
-    TOKEN_RE.lastIndex = 0
-    let m: RegExpExecArray | null
-
-    while ((m = TOKEN_RE.exec(line)) !== null) {
-      if (m.index > last) {
-        container.appendChild(document.createTextNode(line.slice(last, m.index)))
-      }
-      const token = m[0]!
-      container.appendChild(token.startsWith("{[") ? makeSpintaxChip(token) : makeVarChip(token))
-      last = m.index + token.length
-    }
-
-    if (last < line.length) {
-      container.appendChild(document.createTextNode(line.slice(last)))
+  // Process the full string at once so multi-line spintax {[option1\ntext|option2\ntext]}
+  // is matched as a single token (splitting by \n first would break the regex match)
+  const appendText = (text: string) => {
+    const parts = text.split("\n")
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) container.appendChild(document.createElement("br"))
+      if (parts[i]) container.appendChild(document.createTextNode(parts[i]!))
     }
   }
+
+  TOKEN_RE.lastIndex = 0
+  let last = 0
+  let m: RegExpExecArray | null
+
+  while ((m = TOKEN_RE.exec(raw)) !== null) {
+    if (m.index > last) appendText(raw.slice(last, m.index))
+    const token = m[0]!
+    container.appendChild(token.startsWith("{[") ? makeSpintaxChip(token) : makeVarChip(token))
+    last = m.index + token.length
+  }
+
+  if (last < raw.length) appendText(raw.slice(last))
 }
 
 // Insert a chip at the current selection (after focus is on el)
