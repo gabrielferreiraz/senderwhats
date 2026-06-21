@@ -657,12 +657,14 @@ function TabbedLogPanel({
   isRunning,
   activeTab,
   onTabChange,
+  onRemoveFromQueue,
 }: {
   data: CampaignData
   counts: Counts
   isRunning: boolean
   activeTab: Tab
   onTabChange: (t: Tab) => void
+  onRemoveFromQueue: (id: string) => void
 }) {
   const tabCounts: Record<Tab, number> = {
     queue:  counts.pending,
@@ -726,7 +728,7 @@ function TabbedLogPanel({
           ) : (
             <>
               {data.queueMessages.map((msg) => (
-                <QueueRow key={msg.id} msg={msg} onRemove={removeFromQueue} />
+                <QueueRow key={msg.id} msg={msg} onRemove={onRemoveFromQueue} />
               ))}
               {tabCounts.queue > data.queueMessages.length && (
                 <p className="text-[10px] text-slate-400 dark:text-slate-700 py-3 text-center">
@@ -1944,6 +1946,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           isRunning={isRunning}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          onRemoveFromQueue={removeFromQueue}
         />
       </div>
 
