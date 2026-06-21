@@ -77,7 +77,7 @@ export async function GET(
     pending,
   })
 
-  const [deliveredCount, readCount, repliedCount, repliedViaRemarketingCount] = await Promise.all([
+  const [deliveredCount, readCount, repliedCount, repliedViaRemarketingCount, vendedorRunningCampaigns] = await Promise.all([
     prisma.campaignMessage.count({
       where: { campaignId: id, ackStatus: { gte: 2 } },
     }),
@@ -89,6 +89,11 @@ export async function GET(
     }),
     prisma.campaignMessage.count({
       where: { campaignId: id, repliedViaRemarketing: true },
+    }),
+    prisma.campaign.findMany({
+      where: { vendedorId: campaign.vendedorId, id: { not: id }, status: "RUNNING" },
+      select: { id: true, name: true },
+      orderBy: { createdAt: "desc" },
     }),
   ])
 
@@ -132,6 +137,7 @@ export async function GET(
       failureCategory: m.failureCategory,
       contact: m.contact,
     })),
+    vendedorRunningCampaigns,
     nextPending: nextPendingMsg
       ? {
           id: nextPendingMsg.id,

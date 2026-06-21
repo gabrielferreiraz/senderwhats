@@ -114,7 +114,7 @@ export async function POST(
 
     const campaign = await prisma.campaign.findUnique({
       where: { id },
-      select: { listId: true, templateId: true, templates: true },
+      select: { listId: true, templateId: true, templates: true, vendedorId: true },
     })
     if (!campaign) return NextResponse.json({ error: "Não encontrado" }, { status: 404 })
 
@@ -147,6 +147,32 @@ export async function POST(
       select: { contactId: true },
     })
 
+    // Deduplicação cross-campanha: quando target !== "all", pula contatos que já receberam
+    // mensagem de qualquer campanha deste vendedor OU foram marcados manualmente
+    let alreadyContactedIds = new Set<string>()
+    if (target !== "all" && items.length > 0) {
+      const contactIds = items.map(i => i.contactId)
+      const [byHistory, byFlag] = await Promise.all([
+        prisma.campaignMessage.findMany({
+          where: {
+            contactId: { in: contactIds },
+            status: { in: ["SENT", "COMPLETED"] },
+            campaign: { vendedorId: campaign.vendedorId },
+          },
+          select: { contactId: true },
+          distinct: ["contactId"],
+        }),
+        prisma.contact.findMany({
+          where: { id: { in: contactIds }, lastContactedAt: { not: null } },
+          select: { id: true },
+        }),
+      ])
+      alreadyContactedIds = new Set([
+        ...byHistory.map(m => m.contactId),
+        ...byFlag.map(c => c.id),
+      ])
+    }
+
     const assignments = assignTemplateIds(items.length, abTemplates)
 
     await prisma.$transaction([
@@ -156,15 +182,19 @@ export async function POST(
           campaignId: id,
           contactId,
           currentStep: 1,
-          status: "PENDING",
-          nextSendAt: new Date(),
+          status: alreadyContactedIds.has(contactId) ? "SKIPPED" : "PENDING",
+          nextSendAt: alreadyContactedIds.has(contactId) ? null : new Date(),
           templateId: assignments[i] ?? null,
         })),
         skipDuplicates: true,
       }),
     ])
 
-    return NextResponse.json({ ok: true, queued: items.length })
+    return NextResponse.json({
+      ok: true,
+      queued: items.length - alreadyContactedIds.size,
+      skippedDuplicates: alreadyContactedIds.size,
+    })
   }
 
   if (action === "SCHEDULE") {

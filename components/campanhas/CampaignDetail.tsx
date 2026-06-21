@@ -21,6 +21,7 @@ import {
   WifiOff,
   AlertTriangle,
   Copy,
+  Trash2,
   Timer,
   TrendingUp,
   Zap as ZapIcon,
@@ -115,6 +116,7 @@ type CampaignData = {
   sentMessages: SentMessage[]
   failedMessages: FailedMessage[]
   nextPending: NextPending
+  vendedorRunningCampaigns: { id: string; name: string }[]
 }
 
 type Tab = "queue" | "sent" | "failed"
@@ -316,15 +318,24 @@ function EmptyState({
 
 // ─── Queue Row ────────────────────────────────────────────────────────────────
 
-function QueueRow({ msg }: { msg: QueueMessage }) {
+function QueueRow({ msg, onRemove }: { msg: QueueMessage; onRemove: (id: string) => void }) {
+  const [confirming, setConfirming] = useState(false)
+  const [removing, setRemoving] = useState(false)
   const secs = useCountdown(msg.nextSendAt)
   // secs > 0  → anti-ban delay active (waiting)
   // secs == 0 → nextSendAt is past → ready to be dispatched
   // secs null → no nextSendAt set → ready
   const isDelayed = secs !== null && secs > 0
 
+  const handleRemove = async () => {
+    setRemoving(true)
+    await onRemove(msg.id)
+    setRemoving(false)
+    setConfirming(false)
+  }
+
   return (
-    <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 dark:border-white/[0.04] last:border-0">
+    <div className="flex items-center gap-3 py-2.5 border-b border-slate-100 dark:border-white/[0.04] last:border-0 group/qrow">
       <Clock className={`w-4 h-4 shrink-0 ${isDelayed ? "text-amber-400" : "text-slate-400 dark:text-slate-600"}`} />
       <div className="flex-1 min-w-0">
         <p className="text-xs text-slate-900 dark:text-white">
@@ -336,9 +347,35 @@ function QueueRow({ msg }: { msg: QueueMessage }) {
           {isDelayed ? "Aguardando delay anti-ban" : "Aguardando envio"}
         </p>
       </div>
-      <span className={`text-[10px] font-mono shrink-0 ${isDelayed ? "font-semibold text-amber-500" : "text-slate-400 dark:text-slate-600"}`}>
-        {isDelayed ? fmtCountdown(secs!) : "Na fila"}
-      </span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <span className={`text-[10px] font-mono ${isDelayed ? "font-semibold text-amber-500" : "text-slate-400 dark:text-slate-600"}`}>
+          {isDelayed ? fmtCountdown(secs!) : "Na fila"}
+        </span>
+        <AnimatePresence mode="wait">
+          {confirming ? (
+            <motion.div key="confirm" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="flex items-center gap-1">
+              <button onClick={() => setConfirming(false)} className="text-[10px] px-1.5 py-0.5 rounded text-slate-400 hover:text-slate-200 transition-colors">✕</button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-lg bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/25 transition-colors disabled:opacity-50"
+              >
+                {removing ? "..." : "Remover"}
+              </button>
+            </motion.div>
+          ) : (
+            <motion.button
+              key="trash"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setConfirming(true)}
+              className="p-1 rounded-lg text-slate-300 dark:text-slate-700 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors opacity-0 group-hover/qrow:opacity-100"
+              title="Remover da fila"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </motion.button>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
@@ -689,7 +726,7 @@ function TabbedLogPanel({
           ) : (
             <>
               {data.queueMessages.map((msg) => (
-                <QueueRow key={msg.id} msg={msg} />
+                <QueueRow key={msg.id} msg={msg} onRemove={removeFromQueue} />
               ))}
               {tabCounts.queue > data.queueMessages.length && (
                 <p className="text-[10px] text-slate-400 dark:text-slate-700 py-3 text-center">
@@ -1153,6 +1190,8 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const [forcingDispatch, setForcingDispatch] = useState(false)
   const [sendTargetModal, setSendTargetModal] = useState<"START" | "RESUME" | null>(null)
   const [selectedTarget, setSelectedTarget] = useState<"pending" | "all" | "sent_only">("pending")
+  const [skippedDuplicatesNotice, setSkippedDuplicatesNotice] = useState<number | null>(null)
+  const [confirmRunningModal, setConfirmRunningModal] = useState(false)
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -1238,8 +1277,20 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     return () => clearTimeout(id)
   }, [statusToast?.key])
 
+  // Auto-dismiss duplicates notice after 8s
+  useEffect(() => {
+    if (!skippedDuplicatesNotice) return
+    const id = setTimeout(() => setSkippedDuplicatesNotice(null), 8000)
+    return () => clearTimeout(id)
+  }, [skippedDuplicatesNotice])
+
   const sendNow = useCallback(async (messageId: string) => {
     await fetch(`/api/campaign-messages/${messageId}/send-now`, { method: "POST" })
+    await fetchData()
+  }, [fetchData])
+
+  const removeFromQueue = useCallback(async (messageId: string) => {
+    await fetch(`/api/campaign-messages/${messageId}/remove`, { method: "POST" })
     await fetchData()
   }, [fetchData])
 
@@ -1268,7 +1319,13 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, ...(target ? { target } : {}) }),
       })
-      if (res.ok) await fetchData()
+      if (res.ok) {
+        const body = await res.json() as { ok?: boolean; skippedDuplicates?: number }
+        if (body.skippedDuplicates && body.skippedDuplicates > 0) {
+          setSkippedDuplicatesNotice(body.skippedDuplicates)
+        }
+        await fetchData()
+      }
     } finally {
       setActioning(false)
     }
@@ -1283,8 +1340,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const isPaused = status === "PAUSED"
   const isDraft = status === "DRAFT"
 
-  const handleStartOrResume = () => {
-    const actionType: "START" | "RESUME" = isPaused ? "RESUME" : "START"
+  const proceedStartOrResume = (actionType: "START" | "RESUME") => {
     const alreadySent = counts.sent + counts.completed
     if (alreadySent > 0) {
       setSelectedTarget("pending")
@@ -1292,6 +1348,16 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     } else {
       callAction(actionType)
     }
+  }
+
+  const handleStartOrResume = () => {
+    const actionType: "START" | "RESUME" = isPaused ? "RESUME" : "START"
+    // Só avisa sobre campanhas concorrentes ao INICIAR (não ao retomar)
+    if (actionType === "START" && data.vendedorRunningCampaigns.length > 0) {
+      setConfirmRunningModal(true)
+      return
+    }
+    proceedStartOrResume(actionType)
   }
 
   return (
@@ -1319,6 +1385,25 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 ? "Instância desconectada — disparos pausados"
                 : "Forçamento desligado — aguardando janela"}
             </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* ── Duplicates skipped notice ───────────────────────────────────── */}
+      <AnimatePresence>
+        {skippedDuplicatesNotice !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
+            transition={{ duration: 0.22 }}
+            className="fixed top-5 right-5 z-[100] flex items-start gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium max-w-sm bg-amber-50 dark:bg-[#1a1200] border-amber-200 dark:border-amber-500/30 text-amber-700 dark:text-amber-400"
+          >
+            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              <strong>{skippedDuplicatesNotice}</strong> contato{skippedDuplicatesNotice !== 1 ? "s" : ""} já recebeu{skippedDuplicatesNotice !== 1 ? "ram" : ""} mensagem anterior e {skippedDuplicatesNotice !== 1 ? "foram pulados" : "foi pulado"}.
+              Use <em>Enviar para todos</em> para incluí-los.
+            </span>
+            <button onClick={() => setSkippedDuplicatesNotice(null)} className="ml-auto shrink-0 opacity-60 hover:opacity-100">✕</button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1414,6 +1499,75 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                   className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
                 >
                   {sendTargetModal === "RESUME" ? "Retomar" : "Iniciar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm start with running campaign ──────────────────────────── */}
+      <AnimatePresence>
+        {confirmRunningModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            onClick={() => setConfirmRunningModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-[#0d1117] border border-slate-200 dark:border-white/[0.07] shadow-2xl p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Campanha já ativa</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    O vendedor <span className="font-medium text-slate-700 dark:text-slate-300">{data.vendedor.nome}</span> já possui {data.vendedorRunningCampaigns.length === 1 ? "uma campanha" : `${data.vendedorRunningCampaigns.length} campanhas`} em execução:
+                  </p>
+                </div>
+              </div>
+
+              <ul className="mb-5 space-y-1.5">
+                {data.vendedorRunningCampaigns.map((c) => (
+                  <li key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/8 border border-amber-100 dark:border-amber-500/15">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="animate-ping absolute h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative rounded-full h-1.5 w-1.5 bg-amber-400" />
+                    </span>
+                    <span className="text-xs font-medium text-amber-800 dark:text-amber-300 truncate">{c.name}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+                Iniciar outra campanha ao mesmo tempo pode acelerar os disparos e aumentar o risco de bloqueio pelo WhatsApp. Deseja continuar mesmo assim?
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmRunningModal(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    setConfirmRunningModal(false)
+                    proceedStartOrResume("START")
+                  }}
+                  disabled={actioning}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  Iniciar mesmo assim
                 </button>
               </div>
             </motion.div>

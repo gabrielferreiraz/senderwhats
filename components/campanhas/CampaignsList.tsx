@@ -15,6 +15,7 @@ import {
   CalendarClock,
   Copy,
   Repeat,
+  AlertTriangle,
 } from "lucide-react"
 
 type CampaignStatus = "DRAFT" | "SCHEDULED" | "RUNNING" | "PAUSED" | "COMPLETED" | "FAILED"
@@ -82,6 +83,7 @@ export function CampaignsList({ initial }: Props) {
   const [actioning, setActioning] = useState<string | null>(null)
   const [duplicating, setDuplicating] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [confirmRunning, setConfirmRunning] = useState<{ campaignId: string; names: string[] } | null>(null)
 
   const handleDuplicate = async (id: string) => {
     setDuplicating(id)
@@ -93,6 +95,20 @@ export function CampaignsList({ initial }: Props) {
     } finally {
       setDuplicating(null)
     }
+  }
+
+  const handleStartClick = (id: string, action: "START" | "RESUME") => {
+    if (action === "START") {
+      const campaign = campaigns.find((c) => c.id === id)
+      const running = campaigns.filter(
+        (c) => c.id !== id && c.status === "RUNNING" && c.vendedor.userId === campaign?.vendedor.userId
+      )
+      if (running.length > 0) {
+        setConfirmRunning({ campaignId: id, names: running.map((c) => c.name) })
+        return
+      }
+    }
+    callAction(id, action)
   }
 
   const callAction = async (id: string, action: "START" | "PAUSE" | "RESUME") => {
@@ -126,6 +142,75 @@ export function CampaignsList({ initial }: Props) {
 
   return (
     <>
+      {/* ── Confirm start with running campaign ─────────────────────────── */}
+      <AnimatePresence>
+        {confirmRunning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+            onClick={() => setConfirmRunning(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.2 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-2xl bg-white dark:bg-[#0d1117] border border-slate-200 dark:border-white/[0.07] shadow-2xl p-6"
+            >
+              <div className="flex items-start gap-3 mb-4">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white">Campanha já ativa</p>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Este vendedor já possui {confirmRunning.names.length === 1 ? "uma campanha" : `${confirmRunning.names.length} campanhas`} em execução:
+                  </p>
+                </div>
+              </div>
+
+              <ul className="mb-5 space-y-1.5">
+                {confirmRunning.names.map((name) => (
+                  <li key={name} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/8 border border-amber-100 dark:border-amber-500/15">
+                    <span className="relative flex h-1.5 w-1.5 shrink-0">
+                      <span className="animate-ping absolute h-full w-full rounded-full bg-amber-400 opacity-75" />
+                      <span className="relative rounded-full h-1.5 w-1.5 bg-amber-400" />
+                    </span>
+                    <span className="text-xs font-medium text-amber-800 dark:text-amber-300 truncate">{name}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-5">
+                Iniciar outra campanha ao mesmo tempo pode acelerar os disparos e aumentar o risco de bloqueio pelo WhatsApp. Deseja continuar mesmo assim?
+              </p>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setConfirmRunning(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    const { campaignId } = confirmRunning
+                    setConfirmRunning(null)
+                    callAction(campaignId, "START")
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-white text-xs font-semibold transition-colors"
+                >
+                  Iniciar mesmo assim
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="flex items-center justify-between mb-5">
         <p className="text-xs text-slate-400 dark:text-slate-500">
           {campaigns.length > 0
@@ -245,7 +330,7 @@ export function CampaignsList({ initial }: Props) {
 
                     {canStart && (
                       <button
-                        onClick={() => callAction(c.id, isPaused ? "RESUME" : "START")}
+                        onClick={() => handleStartClick(c.id, isPaused ? "RESUME" : "START")}
                         disabled={loading}
                         className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded-md bg-violet-50 dark:bg-violet-500/10 text-violet-700 dark:text-violet-400 hover:bg-violet-100 dark:hover:bg-violet-500/20 transition-colors disabled:opacity-50"
                       >

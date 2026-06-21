@@ -447,6 +447,11 @@ async function updateMsg(id: string, data: Parameters<typeof prisma.campaignMess
   await prisma.campaignMessage.updateMany({ where: { id }, data })
 }
 
+/** Persists first-contact timestamp on the Contact so deduplication survives campaign deletion */
+async function markContactContacted(contactId: string) {
+  await prisma.contact.updateMany({ where: { id: contactId, lastContactedAt: null }, data: { lastContactedAt: new Date() } })
+}
+
 // ─── Core: process a single CampaignMessage ───────────────────────────────────
 
 async function processMessage(
@@ -483,6 +488,7 @@ async function processMessage(
       const waMsgId = await sendText(vendedorUserId, phone, text)
       log("✅", `Msg direta → ${phone} (${contact.name ?? "sem nome"})`)
       await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) })
+      await markContactContacted(contactId)
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err)
       if (isTransient(reason)) {
@@ -558,8 +564,10 @@ async function processMessage(
         nextSendAt: new Date(Date.now() + step.delayAfter * 1000),
         ...waFields,
       })
+      await markContactContacted(contactId)
     } else {
       await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ...waFields })
+      await markContactContacted(contactId)
     }
   } catch (err: unknown) {
     const reason = err instanceof Error ? err.message : String(err)

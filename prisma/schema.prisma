@@ -18,14 +18,15 @@ model Vendedor {
 }
 
 model Contact {
-  id        String            @id @default(cuid())
-  phone     String            @unique
-  name      String?
-  tags      String[]
-  variables Json?             // Campos extras do CSV: {email, saldo, vencimento, ...}
-  createdAt DateTime          @default(now())
-  listItems ContactListItem[]
-  messages  CampaignMessage[]
+  id              String            @id @default(cuid())
+  phone           String            @unique
+  name            String?
+  tags            String[]
+  variables       Json?             // Campos extras do CSV: {email, saldo, vencimento, ...}
+  lastContactedAt DateTime?         // Set on first successful send, or via "marcar como já enviado"
+  createdAt       DateTime          @default(now())
+  listItems       ContactListItem[]
+  messages        CampaignMessage[]
 }
 
 model ContactList {

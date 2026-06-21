@@ -15,6 +15,7 @@ import {
   Tag,
   Database,
   ChevronDown,
+  CheckCheck,
 } from "lucide-react"
 import { ImportCSVModal } from "./ImportCSVModal"
 import { NewListModal } from "./NewListModal"
@@ -228,6 +229,9 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   const [deleteResult, setDeleteResult] = useState<{ deleted: number; kept: number } | null>(null)
   const [confirmDeleteContactId, setConfirmDeleteContactId] = useState<string | null>(null)
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null)
+  const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set())
+  const [markingAsSent, setMarkingAsSent] = useState(false)
+  const [markSentToast, setMarkSentToast] = useState<number | null>(null)
 
   const fetchContacts = useCallback(
     async (p: number, q: string, listId: string | null, vendedorId: string, journey: string) => {
@@ -263,6 +267,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   useEffect(() => {
     const timer = setTimeout(() => {
       isResettingPageRef.current = true
+      setSelectedContactIds(new Set())
       setPage(1)
       fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney)
     }, 300)
@@ -311,11 +316,63 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
     }
   }
 
+  const toggleContact = (id: string) => {
+    setSelectedContactIds((prev) => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleAll = () => {
+    if (selectedContactIds.size === contacts.length && contacts.length > 0) {
+      setSelectedContactIds(new Set())
+    } else {
+      setSelectedContactIds(new Set(contacts.map((c) => c.id)))
+    }
+  }
+
+  const handleMarkAsSent = async () => {
+    if (selectedContactIds.size === 0) return
+    setMarkingAsSent(true)
+    try {
+      const res = await fetch("/api/contacts/mark-sent", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactIds: Array.from(selectedContactIds) }),
+      })
+      if (res.ok) {
+        const body = await res.json() as { updated: number }
+        setMarkSentToast(body.updated)
+        setTimeout(() => setMarkSentToast(null), 4500)
+        setSelectedContactIds(new Set())
+        fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney)
+      }
+    } finally {
+      setMarkingAsSent(false)
+    }
+  }
+
   const activeList = lists.find((l) => l.id === selectedListId)
   const hasFilters = Boolean(selectedListId || selectedVendedorId || selectedJourney)
 
   return (
     <>
+      {/* ── Mark as sent toast ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {markSentToast !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: -16, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
+            transition={{ duration: 0.2 }}
+            className="fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium bg-emerald-50 dark:bg-[#0a1a12] border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+          >
+            <CheckCheck className="w-4 h-4 shrink-0" />
+            <span><strong>{markSentToast}</strong> contato{markSentToast !== 1 ? "s marcados" : " marcado"} como já enviado</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <div className="flex gap-5 h-[calc(100vh-6rem)]">
         {/* Left panel: Importações */}
         <div className="w-64 shrink-0 flex flex-col gap-1.5">
@@ -514,10 +571,47 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             </span>
           </div>
 
+          {/* Bulk action bar */}
+          <AnimatePresence>
+            {selectedContactIds.size > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.18 }}
+                className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20"
+              >
+                <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">
+                  {selectedContactIds.size} selecionado{selectedContactIds.size !== 1 ? "s" : ""}
+                </span>
+                <button
+                  onClick={handleMarkAsSent}
+                  disabled={markingAsSent}
+                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
+                >
+                  <CheckCheck className="w-3.5 h-3.5" />
+                  {markingAsSent ? "Marcando..." : "Marcar como já enviado"}
+                </button>
+                <button
+                  onClick={() => setSelectedContactIds(new Set())}
+                  className="ml-auto text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           {/* Table */}
           <div className="flex-1 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden flex flex-col">
             {/* Table header */}
-            <div className="grid grid-cols-[2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 border-b border-slate-200 dark:border-white/[0.06] text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50 dark:bg-white/[0.02]">
+            <div className="grid grid-cols-[24px_2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 border-b border-slate-200 dark:border-white/[0.06] text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50 dark:bg-white/[0.02]">
+              <input
+                type="checkbox"
+                className="rounded border-slate-300 dark:border-slate-600 w-3.5 h-3.5 accent-violet-600"
+                checked={contacts.length > 0 && selectedContactIds.size === contacts.length}
+                onChange={toggleAll}
+              />
               <span>Contato / Jornada</span>
               <span>Telefone</span>
               <span>Variáveis</span>
@@ -569,10 +663,18 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                           layout
                           exit={{ opacity: 0, height: 0, marginBottom: 0 }}
                           transition={{ duration: 0.18 }}
-                          className={`grid grid-cols-[2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 items-center text-sm group/row ${
+                          className={`grid grid-cols-[24px_2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 items-center text-sm group/row ${
                             i !== contacts.length - 1 ? "border-b border-slate-100 dark:border-white/[0.04]" : ""
                           } hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors`}
                         >
+                          {/* Checkbox */}
+                          <input
+                            type="checkbox"
+                            className="rounded border-slate-300 dark:border-slate-600 w-3.5 h-3.5 accent-violet-600"
+                            checked={selectedContactIds.has(c.id)}
+                            onChange={() => toggleContact(c.id)}
+                          />
+
                           {/* Name + journey badge */}
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-600/30 dark:to-indigo-600/30 flex items-center justify-center text-[10px] font-bold text-violet-600 dark:text-violet-300 shrink-0">

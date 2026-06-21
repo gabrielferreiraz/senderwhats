@@ -10,6 +10,7 @@ type RmktRow = RmktForJourney & { number: string }
 function computeJourney(
   msgs: MsgForJourney[],
   rmkt: RmktForJourney | null,
+  lastContactedAt: Date | null,
   vendedorId?: string
 ): string {
   const filtered = vendedorId ? msgs.filter((m) => m.campaign.vendedorId === vendedorId) : msgs
@@ -25,6 +26,9 @@ function computeJourney(
   if (filtered.some((m) => m.status === "SENT" || m.status === "COMPLETED")) return "enviado"
   if (filtered.some((m) => m.status === "FAILED")) return "falhou"
   if (filtered.some((m) => m.status === "PENDING" || m.status === "SENDING")) return "aguardando"
+
+  // Manually marked as already sent (e.g. after data loss)
+  if (lastContactedAt) return "enviado"
 
   return "sem_envio"
 }
@@ -68,7 +72,12 @@ export async function GET(req: NextRequest) {
     // Journey-specific WHERE clauses
     switch (journey) {
       case "sem_envio":
-        conditions.push({ messages: { none: vendedorId ? { campaign: { vendedorId } } : {} } })
+        conditions.push({
+          AND: [
+            { messages: { none: vendedorId ? { campaign: { vendedorId } } : {} } },
+            { lastContactedAt: null },
+          ],
+        })
         break
 
       case "aguardando":
@@ -157,6 +166,7 @@ export async function GET(req: NextRequest) {
           name: true,
           tags: true,
           variables: true,
+          lastContactedAt: true,
           createdAt: true,
           _count: { select: { listItems: true } },
           listItems: { select: { list: { select: { id: true, name: true } } } },
@@ -192,9 +202,9 @@ export async function GET(req: NextRequest) {
       if (!rmktByPhone.has(r.number)) rmktByPhone.set(r.number, r)
     }
 
-    const contactsWithJourney = contacts.map(({ messages, ...c }) => ({
+    const contactsWithJourney = contacts.map(({ messages, lastContactedAt, ...c }) => ({
       ...c,
-      journey: computeJourney(messages, rmktByPhone.get(c.phone) ?? null, vendedorId),
+      journey: computeJourney(messages, rmktByPhone.get(c.phone) ?? null, lastContactedAt, vendedorId),
     }))
 
     return NextResponse.json({
