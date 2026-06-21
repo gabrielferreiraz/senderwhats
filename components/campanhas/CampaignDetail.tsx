@@ -116,7 +116,7 @@ type CampaignData = {
   sentMessages: SentMessage[]
   failedMessages: FailedMessage[]
   nextPending: NextPending
-  vendedorRunningCampaigns: { id: string; name: string }[]
+  vendedorRunningCampaigns?: { id: string; name: string }[]
 }
 
 type Tab = "queue" | "sent" | "failed"
@@ -1353,7 +1353,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const handleStartOrResume = () => {
     const actionType: "START" | "RESUME" = isPaused ? "RESUME" : "START"
     // Só avisa sobre campanhas concorrentes ao INICIAR (não ao retomar)
-    if (actionType === "START" && data.vendedorRunningCampaigns.length > 0) {
+    if (actionType === "START" && (data.vendedorRunningCampaigns ?? []).length > 0) {
       setConfirmRunningModal(true)
       return
     }
@@ -1531,13 +1531,13 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 <div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">Campanha já ativa</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    O vendedor <span className="font-medium text-slate-700 dark:text-slate-300">{data.vendedor.nome}</span> já possui {data.vendedorRunningCampaigns.length === 1 ? "uma campanha" : `${data.vendedorRunningCampaigns.length} campanhas`} em execução:
+                    O vendedor <span className="font-medium text-slate-700 dark:text-slate-300">{data.vendedor.nome}</span> já possui {(data.vendedorRunningCampaigns ?? []).length === 1 ? "uma campanha" : `${(data.vendedorRunningCampaigns ?? []).length} campanhas`} em execução:
                   </p>
                 </div>
               </div>
 
               <ul className="mb-5 space-y-1.5">
-                {data.vendedorRunningCampaigns.map((c) => (
+                {(data.vendedorRunningCampaigns ?? []).map((c) => (
                   <li key={c.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-500/8 border border-amber-100 dark:border-amber-500/15">
                     <span className="relative flex h-1.5 w-1.5 shrink-0">
                       <span className="animate-ping absolute h-full w-full rounded-full bg-amber-400 opacity-75" />
