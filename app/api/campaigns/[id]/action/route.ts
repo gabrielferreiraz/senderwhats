@@ -7,9 +7,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params
-  const { action, scheduledAt: scheduledAtRaw } = await req.json() as {
+  const { action, scheduledAt: scheduledAtRaw, target } = await req.json() as {
     action: "START" | "PAUSE" | "RESUME" | "SCHEDULE" | "FORCE_DISPATCH"
     scheduledAt?: string
+    target?: "pending" | "all" | "sent_only"
   }
 
   if (action === "FORCE_DISPATCH") {
@@ -43,7 +44,31 @@ export async function POST(
 
     const newStatus =
       campaign.scheduledAt && campaign.scheduledAt > new Date() ? "SCHEDULED" : "RUNNING"
-    await prisma.campaign.update({ where: { id }, data: { status: newStatus } })
+    const now = new Date()
+
+    if (target === "all") {
+      await prisma.$transaction([
+        prisma.campaign.update({ where: { id }, data: { status: newStatus } }),
+        prisma.campaignMessage.updateMany({
+          where: { campaignId: id },
+          data: { status: "PENDING", nextSendAt: now, currentStep: 1, sentAt: null },
+        }),
+      ])
+    } else if (target === "sent_only") {
+      await prisma.$transaction([
+        prisma.campaignMessage.updateMany({
+          where: { campaignId: id, status: "PENDING" },
+          data: { status: "SKIPPED" },
+        }),
+        prisma.campaignMessage.updateMany({
+          where: { campaignId: id, status: { in: ["SENT", "COMPLETED"] } },
+          data: { status: "PENDING", nextSendAt: now, currentStep: 1, sentAt: null },
+        }),
+        prisma.campaign.update({ where: { id }, data: { status: newStatus } }),
+      ])
+    } else {
+      await prisma.campaign.update({ where: { id }, data: { status: newStatus } })
+    }
     return NextResponse.json({ ok: true, status: newStatus })
   }
 
@@ -51,16 +76,39 @@ export async function POST(
     const existing = await prisma.campaignMessage.count({ where: { campaignId: id } })
 
     if (existing > 0) {
-      // Campaign was SCHEDULED: messages have nextSendAt = scheduled time.
-      // Reset any future nextSendAt so the worker picks them up immediately.
       const now = new Date()
-      await prisma.$transaction([
-        prisma.campaign.update({ where: { id }, data: { status: "RUNNING", scheduledAt: null } }),
-        prisma.campaignMessage.updateMany({
-          where: { campaignId: id, status: "PENDING", nextSendAt: { gt: now } },
-          data: { nextSendAt: now },
-        }),
-      ])
+      if (target === "all") {
+        // Reset every message back to PENDING — re-sends to everyone from step 1
+        await prisma.$transaction([
+          prisma.campaign.update({ where: { id }, data: { status: "RUNNING", scheduledAt: null } }),
+          prisma.campaignMessage.updateMany({
+            where: { campaignId: id },
+            data: { status: "PENDING", nextSendAt: now, currentStep: 1, sentAt: null },
+          }),
+        ])
+      } else if (target === "sent_only") {
+        // Skip current pending queue, re-queue only already-sent messages
+        await prisma.$transaction([
+          prisma.campaignMessage.updateMany({
+            where: { campaignId: id, status: "PENDING" },
+            data: { status: "SKIPPED" },
+          }),
+          prisma.campaignMessage.updateMany({
+            where: { campaignId: id, status: { in: ["SENT", "COMPLETED"] } },
+            data: { status: "PENDING", nextSendAt: now, currentStep: 1, sentAt: null },
+          }),
+          prisma.campaign.update({ where: { id }, data: { status: "RUNNING", scheduledAt: null } }),
+        ])
+      } else {
+        // Default: only process remaining PENDING (existing behavior)
+        await prisma.$transaction([
+          prisma.campaign.update({ where: { id }, data: { status: "RUNNING", scheduledAt: null } }),
+          prisma.campaignMessage.updateMany({
+            where: { campaignId: id, status: "PENDING", nextSendAt: { gt: now } },
+            data: { nextSendAt: now },
+          }),
+        ])
+      }
       return NextResponse.json({ ok: true, queued: existing })
     }
 

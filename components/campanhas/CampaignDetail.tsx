@@ -1151,6 +1151,8 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const [actioning, setActioning] = useState(false)
   const [duplicating, setDuplicating] = useState(false)
   const [forcingDispatch, setForcingDispatch] = useState(false)
+  const [sendTargetModal, setSendTargetModal] = useState<"START" | "RESUME" | null>(null)
+  const [selectedTarget, setSelectedTarget] = useState<"pending" | "all" | "sent_only">("pending")
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -1255,13 +1257,16 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     }
   }
 
-  const callAction = async (action: "START" | "PAUSE" | "RESUME") => {
+  const callAction = async (
+    action: "START" | "PAUSE" | "RESUME",
+    target?: "pending" | "all" | "sent_only"
+  ) => {
     setActioning(true)
     try {
       const res = await fetch(`/api/campaigns/${initial.id}/action`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action, ...(target ? { target } : {}) }),
       })
       if (res.ok) await fetchData()
     } finally {
@@ -1277,6 +1282,17 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const isRunning = status === "RUNNING"
   const isPaused = status === "PAUSED"
   const isDraft = status === "DRAFT"
+
+  const handleStartOrResume = () => {
+    const actionType: "START" | "RESUME" = isPaused ? "RESUME" : "START"
+    const alreadySent = counts.sent + counts.completed
+    if (alreadySent > 0) {
+      setSelectedTarget("pending")
+      setSendTargetModal(actionType)
+    } else {
+      callAction(actionType)
+    }
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-4 sm:space-y-6">
@@ -1306,6 +1322,105 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           </motion.div>
         )}
       </AnimatePresence>
+      {/* ── Send Target Modal ────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {sendTargetModal && (
+          <motion.div
+            key="send-target-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+            onClick={(e) => { if (e.target === e.currentTarget) setSendTargetModal(null) }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 8 }}
+              transition={{ duration: 0.18 }}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-white/[0.08] p-6 max-w-sm w-full shadow-2xl"
+            >
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Para quem deseja enviar?</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                Esta campanha tem{" "}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{(counts.sent + counts.completed).toLocaleString("pt-BR")} já disparados</span>
+                {" "}e{" "}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">{counts.pending.toLocaleString("pt-BR")} na fila</span>.
+              </p>
+
+              <div className="mt-4 space-y-2">
+                {(["pending", "all", "sent_only"] as const).map((opt) => {
+                  const cfg = {
+                    pending: {
+                      label: "Apenas não enviados",
+                      tag: "(recomendado)",
+                      desc: `${counts.pending.toLocaleString("pt-BR")} contatos aguardando na fila`,
+                      count: counts.pending,
+                    },
+                    all: {
+                      label: "Todos",
+                      tag: "",
+                      desc: `Reenvia para todos os ${counts.total.toLocaleString("pt-BR")} contatos`,
+                      count: counts.total,
+                    },
+                    sent_only: {
+                      label: "Apenas já enviados",
+                      tag: "",
+                      desc: `Reenvia para ${(counts.sent + counts.completed).toLocaleString("pt-BR")} que já receberam`,
+                      count: counts.sent + counts.completed,
+                    },
+                  }[opt]
+                  const isSelected = selectedTarget === opt
+                  return (
+                    <button
+                      key={opt}
+                      onClick={() => setSelectedTarget(opt)}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all ${
+                        isSelected
+                          ? "border-violet-400 dark:border-violet-500 bg-violet-50 dark:bg-violet-500/10"
+                          : "border-slate-200 dark:border-white/[0.06] hover:border-slate-300 dark:hover:border-white/10"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-xs font-semibold ${isSelected ? "text-violet-700 dark:text-violet-300" : "text-slate-700 dark:text-slate-300"}`}>
+                          {cfg.label}
+                          {cfg.tag && <span className="ml-1.5 text-[10px] font-normal opacity-50">{cfg.tag}</span>}
+                        </span>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${isSelected ? "bg-violet-100 dark:bg-violet-500/20 text-violet-600 dark:text-violet-400" : "bg-slate-100 dark:bg-white/5 text-slate-500"}`}>
+                          {cfg.count.toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">{cfg.desc}</p>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex gap-2 mt-5">
+                <button
+                  onClick={() => setSendTargetModal(null)}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-white/[0.06] text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => {
+                    const action = sendTargetModal
+                    const target = selectedTarget === "pending" ? undefined : selectedTarget
+                    setSendTargetModal(null)
+                    callAction(action, target)
+                  }}
+                  disabled={actioning}
+                  className="flex-1 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  {sendTargetModal === "RESUME" ? "Retomar" : "Iniciar"}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         {/* Left: back + title */}
@@ -1366,7 +1481,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           {(isDraft || isPaused) && (
             <motion.button
               whileTap={{ scale: 0.96 }}
-              onClick={() => callAction(isPaused ? "RESUME" : "START")}
+              onClick={handleStartOrResume}
               disabled={actioning}
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 shadow-lg shadow-violet-900/30"
             >
