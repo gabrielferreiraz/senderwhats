@@ -230,8 +230,11 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   const [confirmDeleteContactId, setConfirmDeleteContactId] = useState<string | null>(null)
   const [deletingContactId, setDeletingContactId] = useState<string | null>(null)
   const [selectedContactIds, setSelectedContactIds] = useState<Set<string>>(new Set())
+  const [allPagesSelected, setAllPagesSelected] = useState(false)
+  const [loadingAllIds, setLoadingAllIds] = useState(false)
   const [markingAsSent, setMarkingAsSent] = useState(false)
-  const [markSentToast, setMarkSentToast] = useState<number | null>(null)
+  const [unmarkingAsSent, setUnmarkingAsSent] = useState(false)
+  const [bulkToast, setBulkToast] = useState<{ count: number; op: "mark" | "unmark" } | null>(null)
 
   const fetchContacts = useCallback(
     async (p: number, q: string, listId: string | null, vendedorId: string, journey: string) => {
@@ -268,6 +271,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
     const timer = setTimeout(() => {
       isResettingPageRef.current = true
       setSelectedContactIds(new Set())
+      setAllPagesSelected(false)
       setPage(1)
       fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney)
     }, 300)
@@ -317,6 +321,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   }
 
   const toggleContact = (id: string) => {
+    setAllPagesSelected(false)
     setSelectedContactIds((prev) => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
@@ -327,29 +332,52 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   const toggleAll = () => {
     if (selectedContactIds.size === contacts.length && contacts.length > 0) {
       setSelectedContactIds(new Set())
+      setAllPagesSelected(false)
     } else {
       setSelectedContactIds(new Set(contacts.map((c) => c.id)))
+      setAllPagesSelected(false)
     }
   }
 
-  const handleMarkAsSent = async () => {
-    if (selectedContactIds.size === 0) return
-    setMarkingAsSent(true)
+  const handleSelectAllPages = async () => {
+    setLoadingAllIds(true)
     try {
-      const res = await fetch("/api/contacts/mark-sent", {
+      const params = new URLSearchParams({ search })
+      if (selectedListId) params.set("listId", selectedListId)
+      if (selectedVendedorId) params.set("vendedorId", selectedVendedorId)
+      if (selectedJourney) params.set("journey", selectedJourney)
+      const res = await fetch(`/api/contacts/all-ids?${params}`, { cache: "no-store" })
+      if (res.ok) {
+        const { ids } = await res.json() as { ids: string[] }
+        setSelectedContactIds(new Set(ids))
+        setAllPagesSelected(true)
+      }
+    } finally {
+      setLoadingAllIds(false)
+    }
+  }
+
+  const runBulkOp = async (op: "mark" | "unmark") => {
+    const ids = Array.from(selectedContactIds)
+    if (ids.length === 0) return
+    const endpoint = op === "mark" ? "/api/contacts/mark-sent" : "/api/contacts/unmark-sent"
+    op === "mark" ? setMarkingAsSent(true) : setUnmarkingAsSent(true)
+    try {
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactIds: Array.from(selectedContactIds) }),
+        body: JSON.stringify({ contactIds: ids }),
       })
       if (res.ok) {
         const body = await res.json() as { updated: number }
-        setMarkSentToast(body.updated)
-        setTimeout(() => setMarkSentToast(null), 4500)
+        setBulkToast({ count: body.updated, op })
+        setTimeout(() => setBulkToast(null), 4500)
         setSelectedContactIds(new Set())
+        setAllPagesSelected(false)
         fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney)
       }
     } finally {
-      setMarkingAsSent(false)
+      op === "mark" ? setMarkingAsSent(false) : setUnmarkingAsSent(false)
     }
   }
 
@@ -358,18 +386,25 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
 
   return (
     <>
-      {/* ── Mark as sent toast ──────────────────────────────────────────── */}
+      {/* ── Bulk op toast ───────────────────────────────────────────────── */}
       <AnimatePresence>
-        {markSentToast !== null && (
+        {bulkToast !== null && (
           <motion.div
             initial={{ opacity: 0, y: -16, scale: 0.96 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -12, scale: 0.96 }}
             transition={{ duration: 0.2 }}
-            className="fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium bg-emerald-50 dark:bg-[#0a1a12] border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+            className={`fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium ${
+              bulkToast.op === "mark"
+                ? "bg-emerald-50 dark:bg-[#0a1a12] border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300"
+            }`}
           >
             <CheckCheck className="w-4 h-4 shrink-0" />
-            <span><strong>{markSentToast}</strong> contato{markSentToast !== 1 ? "s marcados" : " marcado"} como já enviado</span>
+            <span>
+              <strong>{bulkToast.count}</strong> contato{bulkToast.count !== 1 ? "s" : ""}{" "}
+              {bulkToast.op === "mark" ? "marcados como já enviado" : "desmarcados como enviado"}
+            </span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -579,25 +614,51 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.18 }}
-                className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20"
+                className="flex flex-wrap items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-50 dark:bg-violet-500/10 border border-violet-200 dark:border-violet-500/20"
               >
-                <span className="text-xs font-semibold text-violet-700 dark:text-violet-300">
-                  {selectedContactIds.size} selecionado{selectedContactIds.size !== 1 ? "s" : ""}
+                <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 shrink-0">
+                  {allPagesSelected
+                    ? `Todos os ${selectedContactIds.size} selecionados`
+                    : `${selectedContactIds.size} selecionado${selectedContactIds.size !== 1 ? "s" : ""}`}
                 </span>
-                <button
-                  onClick={handleMarkAsSent}
-                  disabled={markingAsSent}
-                  className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-50"
-                >
-                  <CheckCheck className="w-3.5 h-3.5" />
-                  {markingAsSent ? "Marcando..." : "Marcar como já enviado"}
-                </button>
-                <button
-                  onClick={() => setSelectedContactIds(new Set())}
-                  className="ml-auto text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors"
-                >
-                  Cancelar
-                </button>
+
+                {/* Select all pages link — only when current page fills the selection */}
+                {!allPagesSelected && selectedContactIds.size === contacts.length && total > contacts.length && (
+                  <button
+                    onClick={handleSelectAllPages}
+                    disabled={loadingAllIds}
+                    className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 underline underline-offset-2 hover:text-violet-500 transition-colors disabled:opacity-50"
+                  >
+                    {loadingAllIds ? "Carregando..." : `Selecionar todos os ${total.toLocaleString("pt-BR")}`}
+                  </button>
+                )}
+
+                <div className="flex items-center gap-1.5 ml-auto">
+                  <button
+                    onClick={() => runBulkOp("mark")}
+                    disabled={markingAsSent || unmarkingAsSent}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
+                    title="Marca como já enviado — será pulado em novas campanhas"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5" />
+                    {markingAsSent ? "Marcando..." : "Marcar como enviado"}
+                  </button>
+                  <button
+                    onClick={() => runBulkOp("unmark")}
+                    disabled={markingAsSent || unmarkingAsSent}
+                    className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
+                    title="Remove a marcação manual — contatos voltam a ser elegíveis para campanhas"
+                  >
+                    <CheckCheck className="w-3.5 h-3.5 opacity-40" />
+                    {unmarkingAsSent ? "Desmarcando..." : "Desmarcar"}
+                  </button>
+                  <button
+                    onClick={() => { setSelectedContactIds(new Set()); setAllPagesSelected(false) }}
+                    className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors px-1"
+                  >
+                    ✕
+                  </button>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
