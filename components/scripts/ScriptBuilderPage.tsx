@@ -15,6 +15,7 @@ import {
   Search,
   X,
   Shuffle,
+  RefreshCw,
   Maximize2,
   Minimize2,
   Bold,
@@ -528,6 +529,11 @@ export function ScriptBuilderPage({ template }: Props) {
     replace: (raw: string) => void
   } | null>(null)
   const [expandedSteps, setExpandedSteps] = useState<Record<string, boolean>>({})
+  const [spintaxSeeds, setSpintaxSeeds] = useState<Record<string, number>>({})
+
+  const cycleStepVariation = useCallback((stepId: string) => {
+    setSpintaxSeeds((prev) => ({ ...prev, [stepId]: (prev[stepId] ?? 0) + 1 }))
+  }, [])
 
   const editorRefs = useRef<Record<string, RichEditorHandle | null>>({})
 
@@ -702,15 +708,16 @@ export function ScriptBuilderPage({ template }: Props) {
       </div>
 
       {/* ── Split pane ──────────────────────────────────────────────────────── */}
-      <div className="flex gap-10 items-start">
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">
         {/* LEFT: Builder timeline */}
-        <div className="flex-[0_0_58%] min-w-0">
+        <div className="w-full lg:flex-[0_0_58%] min-w-0">
           <AnimatePresence>
             {steps.map((step, index) => {
               const isLast = index === steps.length - 1
               const isFocused = focusedId === step.id
               const isVarOpen = varPickerStepId === step.id
               const isSpintaxOpen = spintaxPickerStepId === step.id
+              const hasSpintax = /\{\[([^\]]+)\]\}/.test(step.body)
 
               return (
                 <motion.div
@@ -1042,6 +1049,19 @@ export function ScriptBuilderPage({ template }: Props) {
                           </AnimatePresence>
                         </div>
 
+                        {/* Cycle variation preview button — only when step has spintax */}
+                        {hasSpintax && (
+                          <button
+                            type="button"
+                            onClick={() => cycleStepVariation(step.id)}
+                            title="Ver próxima variação no preview do celular"
+                            className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20 transition-colors"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Trocar preview
+                          </button>
+                        )}
+
                         {/* Edit spintax chip — triggered by clicking ⚡ chip in the editor */}
                         <div className="relative">
                           <AnimatePresence>
@@ -1251,16 +1271,16 @@ export function ScriptBuilderPage({ template }: Props) {
         </div>
 
         {/* RIGHT: Phone mockup */}
-        <div className="flex-[0_0_42%] sticky top-0 pt-1">
+        <div className="w-full lg:flex-[0_0_42%] lg:sticky lg:top-0 pt-1">
           <div className="mb-4 space-y-0.5">
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Preview ao Vivo
             </p>
             <p className="text-[10px] text-slate-400 dark:text-slate-700">
-              Variáveis e variações são simuladas aleatoriamente no preview
+              Variáveis são simuladas · use &ldquo;Trocar preview&rdquo; para ver cada variação
             </p>
           </div>
-          <PhoneMockup steps={steps} />
+          <PhoneMockup steps={steps} spintaxSeeds={spintaxSeeds} />
         </div>
       </div>
     </div>

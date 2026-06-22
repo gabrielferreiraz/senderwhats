@@ -486,7 +486,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                     </span>
                   </button>
 
-                  <div className="px-3 pb-2.5">
+                  <div className="px-3 pb-2.5 flex items-center justify-between gap-2">
                     <button
                       onClick={() => setDeleteTarget({ id: list.id, name: list.name, count: list._count.items })}
                       className="flex items-center gap-1.5 text-[10px] font-semibold text-slate-400 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 transition-colors group/btn"
@@ -494,6 +494,13 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                       <Trash2 className="w-3 h-3 group-hover/btn:text-rose-400 transition-colors" />
                       <span className="group-hover/btn:text-rose-400 transition-colors">Desimportar</span>
                     </button>
+                    {list.vendedor ? (
+                      <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate max-w-[100px]" title={list.vendedor.nome}>
+                        {list.vendedor.nome}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-300 dark:text-slate-700 italic">Sem responsável</span>
+                    )}
                   </div>
                 </motion.div>
               ))}

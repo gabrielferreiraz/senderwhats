@@ -15,6 +15,7 @@ type Step = {
 
 type Props = {
   steps: Step[]
+  spintaxSeeds?: Record<string, number>
 }
 
 const PREVIEW_VARS: Record<string, string> = {
@@ -28,15 +29,21 @@ const PREVIEW_VARS: Record<string, string> = {
   empresa: "Acme Ltda",
 }
 
-function processSpintax(text: string): string {
+function processSpintax(text: string, seed?: number): string {
+  let occurrence = 0
   return text.replace(/\{\[([^\]]+)\]\}/g, (_, options: string) => {
     const parts = options.split("|").map((p) => p.trim())
+    if (seed !== undefined) {
+      const idx = (seed + occurrence) % parts.length
+      occurrence++
+      return parts[idx] ?? parts[0] ?? ""
+    }
     return parts[Math.floor(Math.random() * parts.length)] ?? parts[0] ?? ""
   })
 }
 
-function applyPreview(text: string): string {
-  const withSpintax = processSpintax(text)
+function applyPreview(text: string, seed?: number): string {
+  const withSpintax = processSpintax(text, seed)
   return withSpintax.replace(/\{(\w+)\}/g, (match, key: string) => PREVIEW_VARS[key] ?? match)
 }
 
@@ -68,7 +75,7 @@ function MessageText({ text }: { text: string }) {
   )
 }
 
-export function PhoneMockup({ steps }: Props) {
+export function PhoneMockup({ steps, spintaxSeeds }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -169,7 +176,8 @@ export function PhoneMockup({ steps }: Props) {
 
               <AnimatePresence>
                 {steps.map((step, index) => {
-                  const processed = applyPreview(step.body)
+                  const seed = spintaxSeeds?.[step.id]
+                  const processed = applyPreview(step.body, seed)
                   const isEmpty = step.stepType === "audio" ? !step.audioUrl : !step.body.trim()
                   const isLast = index === steps.length - 1
 
@@ -219,7 +227,7 @@ export function PhoneMockup({ steps }: Props) {
                               )}
                               {step.body.trim() && (
                                 <p className="text-[10px] text-white/90 leading-relaxed whitespace-pre-wrap break-words">
-                                  <MessageText text={applyPreview(step.body)} />
+                                  <MessageText text={applyPreview(step.body, seed)} />
                                 </p>
                               )}
                             </div>
