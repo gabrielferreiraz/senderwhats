@@ -1,0 +1,1 @@
+ALTER TABLE "Campaign" ADD COLUMN "rmktPaused" BOOLEAN NOT NULL DEFAULT false;

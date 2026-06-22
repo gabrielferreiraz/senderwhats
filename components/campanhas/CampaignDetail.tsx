@@ -106,6 +106,7 @@ type CampaignData = {
   rmktWindowEnd: string
   rmktAllowedDays: string
   rmktMaxPerDay: number
+  rmktPaused: boolean
   scheduleRules: ScheduleRule[]
   vendedor: { nome: string; userId: string }
   list: { name: string; _count: { items: number } } | null
@@ -1001,20 +1002,30 @@ type RmktConfig = {
   windowEnd: string
   allowedDays: string
   maxPerDay: number
+  paused: boolean
 }
 
 function RemarketingSection({
   campaignId,
   isRunning,
   config,
+  onPauseToggle,
 }: {
   campaignId: string
   isRunning: boolean
   config: RmktConfig
+  onPauseToggle: () => void
 }) {
   const [leads, setLeads] = useState<RmktLead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [togglingPause, setTogglingPause] = useState(false)
+  const [resumeNotice, setResumeNotice] = useState<{ count: number } | null>(null)
+  const resumeNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (resumeNoticeTimerRef.current) clearTimeout(resumeNoticeTimerRef.current)
+  }, [])
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -1040,6 +1051,28 @@ function RemarketingSection({
     return () => clearInterval(id)
   }, [isRunning, fetchLeads])
 
+  const handlePauseToggle = async () => {
+    setTogglingPause(true)
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/remarketing-pause`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paused: !config.paused }),
+      })
+      if (res.ok) {
+        const data = await res.json() as { paused: boolean; overdueCount: number }
+        if (!data.paused && data.overdueCount > 0) {
+          setResumeNotice({ count: data.overdueCount })
+          if (resumeNoticeTimerRef.current) clearTimeout(resumeNoticeTimerRef.current)
+          resumeNoticeTimerRef.current = setTimeout(() => setResumeNotice(null), 10_000)
+        }
+        onPauseToggle()
+      }
+    } finally {
+      setTogglingPause(false)
+    }
+  }
+
   const pending = useMemo(() => leads.filter((l) => l.status === "pending").length, [leads])
   const replied = useMemo(() => leads.filter((l) => l.replied).length, [leads])
   // Leads já vêm ordenados por nextRun asc da API — o primeiro pending é o próximo a disparar
@@ -1051,14 +1084,19 @@ function RemarketingSection({
       <div className="px-5 py-4 border-b border-slate-100 dark:border-white/[0.04] space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <Repeat className="w-4 h-4 text-violet-500" />
+            <Repeat className={`w-4 h-4 ${config.paused ? "text-amber-400" : "text-violet-500"}`} />
             <span className="font-semibold text-sm text-slate-900 dark:text-white">Follow-up automático</span>
+            {config.paused && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                Pausado
+              </span>
+            )}
             {leads.length > 0 && (
               <span className="text-xs text-slate-400">({leads.length} contato{leads.length !== 1 ? "s" : ""})</span>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {pending > 0 && (
+          <div className="flex items-center gap-2">
+            {pending > 0 && !config.paused && (
               <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400">
                 {pending} aguardando
               </span>
@@ -1069,6 +1107,25 @@ function RemarketingSection({
                 {replied} responderam
               </span>
             )}
+            {/* Pause / Resume toggle */}
+            <button
+              onClick={handlePauseToggle}
+              disabled={togglingPause}
+              title={config.paused ? "Retomar follow-up" : "Pausar follow-up"}
+              className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+                config.paused
+                  ? "bg-emerald-50 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/20 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-500/20"
+                  : "bg-amber-50 dark:bg-amber-500/10 border-amber-200 dark:border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/20"
+              }`}
+            >
+              {togglingPause
+                ? <Loader2 className="w-3 h-3 animate-spin" />
+                : config.paused
+                  ? <Play className="w-3 h-3" />
+                  : <Pause className="w-3 h-3" />
+              }
+              {config.paused ? "Retomar" : "Pausar"}
+            </button>
             <button
               onClick={fetchLeads}
               className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
@@ -1077,6 +1134,26 @@ function RemarketingSection({
             </button>
           </div>
         </div>
+
+        {/* Resume notice — shown briefly after unpausing when there are overdue leads */}
+        <AnimatePresence>
+          {resumeNotice && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-100 dark:border-emerald-500/15"
+            >
+              <Play className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-px" />
+              <p className="text-[11px] text-emerald-700 dark:text-emerald-300 leading-relaxed">
+                Follow-up retomado. <span className="font-semibold">{resumeNotice.count} lead{resumeNotice.count !== 1 ? "s" : ""} aguardando</span> — estes serão enviados primeiro.
+                {config.maxPerDay > 0
+                  ? ` Limite de ${config.maxPerDay}/dia aplicado.`
+                  : " Configure máx/dia para distribuir o backlog."}
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
         {/* Config summary chips */}
         <div className="flex flex-wrap gap-1.5">
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
@@ -1962,7 +2039,9 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
             windowEnd: data.rmktWindowEnd,
             allowedDays: data.rmktAllowedDays,
             maxPerDay: data.rmktMaxPerDay,
+            paused: data.rmktPaused,
           }}
+          onPauseToggle={fetchData}
         />
       )}
     </div>

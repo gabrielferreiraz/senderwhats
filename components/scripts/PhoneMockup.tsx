@@ -25,18 +25,20 @@ function getSaudacao(): string {
   return "Boa noite"
 }
 
-const PREVIEW_VARS: Record<string, string> = {
-  saudacao: getSaudacao(),
-  nome: "Gabriel",
-  primeiro_nome: "Gabriel",
-  nome_completo: "Gabriel Ferreira",
-  telefone: "5511999999999",
-  saldo: "R$ 1.250,00",
-  vencimento: "15/12",
-  produto: "Plano Premium",
-  email: "gabriel@email.com",
-  cidade: "São Paulo",
-  empresa: "Acme Ltda",
+function getPreviewVars(): Record<string, string> {
+  return {
+    saudacao: getSaudacao(),
+    nome: "Gabriel",
+    primeiro_nome: "Gabriel",
+    nome_completo: "Gabriel Ferreira",
+    telefone: "5511999999999",
+    saldo: "R$ 1.250,00",
+    vencimento: "15/12",
+    produto: "Plano Premium",
+    email: "gabriel@email.com",
+    cidade: "São Paulo",
+    empresa: "Acme Ltda",
+  }
 }
 
 function processSpintax(text: string, seed?: number): string {
@@ -53,8 +55,9 @@ function processSpintax(text: string, seed?: number): string {
 }
 
 function applyPreview(text: string, seed?: number): string {
+  const previewVars = getPreviewVars()
   const withSpintax = processSpintax(text, seed)
-  return withSpintax.replace(/\{(\w+)\}/g, (match, key: string) => PREVIEW_VARS[key] ?? match)
+  return withSpintax.replace(/\{(\w+)\}/g, (match, key: string) => previewVars[key] ?? match)
 }
 
 function formatDelay(seconds: number): string {

@@ -96,6 +96,7 @@ model Campaign {
   rmktMinDelaySec     Int      @default(15)      // anti-ban
   rmktMaxDelaySec     Int      @default(45)
   rmktMaxPerDay       Int      @default(0)       // 0 = sem limite diário
+  rmktPaused          Boolean  @default(false)   // Pausa temporária do follow-up (leads ficam na fila)
   maxSendsPerDay    Int                    @default(0)   // 0 = sem limite diário
   forceDispatch     Boolean                @default(false) // ignora janela de horário enquanto ativo
   createdAt         DateTime               @default(now())
@@ -107,6 +108,7 @@ model Campaign {
   remarketingLeads RemarketingLead[]
 
   @@index([status, scheduledAt])
+  @@index([enableRemarketing, rmktPaused])
 }
 
 enum CampaignStatus {

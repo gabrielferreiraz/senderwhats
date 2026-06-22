@@ -339,34 +339,30 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
     }
   }
 
-  const handleSelectAllPages = async () => {
-    setLoadingAllIds(true)
-    try {
-      const params = new URLSearchParams({ search })
-      if (selectedListId) params.set("listId", selectedListId)
-      if (selectedVendedorId) params.set("vendedorId", selectedVendedorId)
-      if (selectedJourney) params.set("journey", selectedJourney)
-      const res = await fetch(`/api/contacts/all-ids?${params}`, { cache: "no-store" })
-      if (res.ok) {
-        const { ids } = await res.json() as { ids: string[] }
-        setSelectedContactIds(new Set(ids))
-        setAllPagesSelected(true)
-      }
-    } finally {
-      setLoadingAllIds(false)
-    }
+  const handleSelectAllPages = () => {
+    setAllPagesSelected(true)
   }
 
   const runBulkOp = async (op: "mark" | "unmark") => {
-    const ids = Array.from(selectedContactIds)
-    if (ids.length === 0) return
+    if (!allPagesSelected && selectedContactIds.size === 0) return
     const endpoint = op === "mark" ? "/api/contacts/mark-sent" : "/api/contacts/unmark-sent"
     op === "mark" ? setMarkingAsSent(true) : setUnmarkingAsSent(true)
     try {
+      const payload = allPagesSelected
+        ? {
+            filter: {
+              search: search || undefined,
+              listId: selectedListId ?? undefined,
+              vendedorId: selectedVendedorId || undefined,
+              journey: selectedJourney || undefined,
+            },
+          }
+        : { contactIds: Array.from(selectedContactIds) }
+
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactIds: ids }),
+        body: JSON.stringify(payload),
       })
       if (res.ok) {
         const body = await res.json() as { updated: number }
@@ -625,7 +621,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
               >
                 <span className="text-xs font-semibold text-violet-700 dark:text-violet-300 shrink-0">
                   {allPagesSelected
-                    ? `Todos os ${selectedContactIds.size} selecionados`
+                    ? `Todos os ${total.toLocaleString("pt-BR")} selecionados`
                     : `${selectedContactIds.size} selecionado${selectedContactIds.size !== 1 ? "s" : ""}`}
                 </span>
 
@@ -633,10 +629,9 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                 {!allPagesSelected && selectedContactIds.size === contacts.length && total > contacts.length && (
                   <button
                     onClick={handleSelectAllPages}
-                    disabled={loadingAllIds}
-                    className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 underline underline-offset-2 hover:text-violet-500 transition-colors disabled:opacity-50"
+                    className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 underline underline-offset-2 hover:text-violet-500 transition-colors"
                   >
-                    {loadingAllIds ? "Carregando..." : `Selecionar todos os ${total.toLocaleString("pt-BR")}`}
+                    {`Selecionar todos os ${total.toLocaleString("pt-BR")}`}
                   </button>
                 )}
 

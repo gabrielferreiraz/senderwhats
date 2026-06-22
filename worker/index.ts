@@ -974,7 +974,7 @@ async function remarketingTick(): Promise<void> {
 
   try {
     const campaigns = await prisma.campaign.findMany({
-      where: { enableRemarketing: true },
+      where: { enableRemarketing: true, rmktPaused: false },
       include: { vendedor: { select: { userId: true } } },
     }).catch((err: unknown) => {
       log("⚠️", `Remarketing: erro ao buscar campanhas: ${errMsg(err)}`)
