@@ -18,8 +18,18 @@ type Props = {
   spintaxSeeds?: Record<string, number>
 }
 
+function getSaudacao(): string {
+  const hour = new Date().getHours()
+  if (hour >= 6 && hour < 12) return "Bom dia"
+  if (hour >= 12 && hour < 18) return "Boa tarde"
+  return "Boa noite"
+}
+
 const PREVIEW_VARS: Record<string, string> = {
+  saudacao: getSaudacao(),
   nome: "Gabriel",
+  primeiro_nome: "Gabriel",
+  nome_completo: "Gabriel Ferreira",
   telefone: "5511999999999",
   saldo: "R$ 1.250,00",
   vencimento: "15/12",
