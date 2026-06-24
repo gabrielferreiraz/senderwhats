@@ -90,11 +90,13 @@ export async function GET(
     prisma.campaignMessage.count({
       where: { campaignId: id, repliedViaRemarketing: true },
     }),
-    prisma.campaign.findMany({
-      where: { vendedorId: campaign.vendedorId, id: { not: id }, status: "RUNNING" },
-      select: { id: true, name: true },
-      orderBy: { createdAt: "desc" },
-    }),
+    campaign.vendedorId
+      ? prisma.campaign.findMany({
+          where: { vendedorId: campaign.vendedorId, id: { not: id }, status: "RUNNING" },
+          select: { id: true, name: true },
+          orderBy: { createdAt: "desc" },
+        })
+      : Promise.resolve([]),
   ])
 
   return NextResponse.json({

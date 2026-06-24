@@ -157,7 +157,7 @@ export async function POST(
           where: {
             contactId: { in: contactIds },
             status: { in: ["SENT", "COMPLETED"] },
-            campaign: { vendedorId: campaign.vendedorId },
+            ...(campaign.vendedorId ? { campaign: { vendedorId: campaign.vendedorId } } : {}),
           },
           select: { contactId: true },
           distinct: ["contactId"],

@@ -83,6 +83,12 @@ export const whatsapp = {
       { method: "POST" }
     ),
 
+  deleteInstance: (userId: string) =>
+    request<{ message: string; userId: string }>(
+      `/instance/${userId}`,
+      { method: "DELETE" }
+    ),
+
   sendText: (userId: string, number: string, message: string) =>
     request<SendResult>(`/message/send-text/${userId}`, {
       method: "POST",

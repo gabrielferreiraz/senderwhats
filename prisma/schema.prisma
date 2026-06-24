@@ -77,7 +77,7 @@ model TemplateStep {
 model Campaign {
   id                String                 @id @default(cuid())
   name              String
-  vendedorId        String                 // Vendedor responsável por esta campanha
+  vendedorId        String?                // Vendedor responsável por esta campanha (null se instância foi removida)
   listId            String?
   templateId        String?
   templates         Json?                  // A/B testing: [{ id: string, weight: number }]
@@ -100,7 +100,7 @@ model Campaign {
   maxSendsPerDay    Int                    @default(0)   // 0 = sem limite diário
   forceDispatch     Boolean                @default(false) // ignora janela de horário enquanto ativo
   createdAt         DateTime               @default(now())
-  vendedor      Vendedor               @relation(fields: [vendedorId], references: [id], onDelete: Cascade)
+  vendedor      Vendedor?              @relation(fields: [vendedorId], references: [id], onDelete: SetNull)
   list          ContactList?           @relation(fields: [listId], references: [id], onDelete: SetNull)
   template      MessageTemplate?       @relation(fields: [templateId], references: [id], onDelete: SetNull)
   messages         CampaignMessage[]

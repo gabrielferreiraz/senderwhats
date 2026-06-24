@@ -13,13 +13,14 @@ export async function DELETE(
     return NextResponse.json({ error: "Vendedor não encontrado." }, { status: 404 })
   }
 
-  // Desconecta da API WhatsApp (best-effort)
+  // Remove sessão da memória, do banco whatsapp_sessions e dos arquivos temp
   try {
-    await whatsapp.disconnect(userId)
+    await whatsapp.deleteInstance(userId)
   } catch {
-    // Ignora se já estava desconectado
+    // Ignora se a sessão já não existia na API
   }
 
+  // vendedorId em Campaign é SET NULL — campanhas ficam intactas, só perdem o vínculo
   await prisma.vendedor.delete({ where: { userId } })
   return NextResponse.json({ ok: true })
 }
