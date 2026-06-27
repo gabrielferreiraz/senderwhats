@@ -40,7 +40,7 @@ type AbEntry = { id: string; weight: number }
 
 type InitialData = {
   name: string
-  vendedorId: string
+  vendedorId: string | null
   listId: string | null
   templateId: string | null
   templates: AbEntry[] | null

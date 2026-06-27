@@ -662,6 +662,7 @@ async function tick(): Promise<void> {
         // ── WhatsApp instance health ─────────────────────────────────────────
         // instanceSnapshots is non-null (null causes early return above).
         // Absent from map OR ready=false both mean the instance is disconnected.
+        if (!campaign.vendedor) continue // vendedorId SET NULL — skip orphaned campaign
         const userId = campaign.vendedor.userId
         const snap = instanceSnapshots.get(userId)
         if (!snap || !snap.ready || !snap.authenticated) {
@@ -989,6 +990,7 @@ async function remarketingTick(): Promise<void> {
     const day1to7 = day === 0 ? 7 : day // 0=Sun→7, 1=Mon→1, …, 6=Sat→6
 
     for (const campaign of campaigns) {
+      if (!campaign.vendedor) continue // vendedorId SET NULL — skip orphaned campaign
       const userId = campaign.vendedor.userId
       try {
         // ── Time-window check (campaign's own rmkt window) ───────────────────

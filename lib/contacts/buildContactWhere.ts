@@ -7,11 +7,13 @@ export type ContactFilter = {
   listId?: string
   vendedorId?: string
   journey?: string
+  createdAfter?: string   // ISO date string — inclusive
+  createdBefore?: string  // ISO date string — inclusive (até 23:59:59)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function buildContactWhere(filter: ContactFilter): Promise<any> {
-  const { search, listId, vendedorId, journey } = filter
+  const { search, listId, vendedorId, journey, createdAfter, createdBefore } = filter
 
   let vendedorUserId: string | undefined
   if (vendedorId) {
@@ -33,6 +35,15 @@ export async function buildContactWhere(filter: ContactFilter): Promise<any> {
   }
 
   if (listId) conditions.push({ listItems: { some: { listId } } })
+
+  if (createdAfter || createdBefore) {
+    conditions.push({
+      createdAt: {
+        ...(createdAfter ? { gte: new Date(createdAfter) } : {}),
+        ...(createdBefore ? { lte: new Date(`${createdBefore}T23:59:59.999Z`) } : {}),
+      },
+    })
+  }
 
   switch (journey) {
     case "sem_envio":

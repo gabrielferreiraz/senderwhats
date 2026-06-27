@@ -27,7 +27,7 @@ type Campaign = {
   status: CampaignStatus
   createdAt: string
   scheduledAt: string | null
-  vendedor: { nome: string; userId: string }
+  vendedor: { nome: string; userId: string } | null
   list: { name: string } | null
   template: { name: string } | null
   _stats: { sent: number; pending: number; failed: number; total: number; pendingRmkt: number }
@@ -101,7 +101,7 @@ export function CampaignsList({ initial }: Props) {
     if (action === "START") {
       const campaign = campaigns.find((c) => c.id === id)
       const running = campaigns.filter(
-        (c) => c.id !== id && c.status === "RUNNING" && c.vendedor.userId === campaign?.vendedor.userId
+        (c) => c.id !== id && c.status === "RUNNING" && c.vendedor?.userId === campaign?.vendedor?.userId && !!campaign?.vendedor?.userId
       )
       if (running.length > 0) {
         setConfirmRunning({ campaignId: id, names: running.map((c) => c.name) })
@@ -275,7 +275,7 @@ export function CampaignsList({ initial }: Props) {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-slate-900 dark:text-white text-sm truncate leading-snug">{c.name}</p>
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
-                        {c.vendedor.nome}{c.list && ` · ${c.list.name}`}
+                        {c.vendedor?.nome}{c.list && ` · ${c.list.name}`}
                       </p>
                       {isScheduled && c.scheduledAt && (
                         <p className="text-[10px] text-blue-500 dark:text-blue-400 flex items-center gap-1 mt-1">

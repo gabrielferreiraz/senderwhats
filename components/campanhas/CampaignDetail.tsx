@@ -108,7 +108,7 @@ type CampaignData = {
   rmktMaxPerDay: number
   rmktPaused: boolean
   scheduleRules: ScheduleRule[]
-  vendedor: { nome: string; userId: string }
+  vendedor: { nome: string; userId: string } | null
   list: { name: string; _count: { items: number } } | null
   template: { name: string; _count: { steps: number } } | null
   _counts: Counts
@@ -1319,7 +1319,8 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
 
   // Poll WhatsApp instance health every 15s
   useEffect(() => {
-    const userId = data.vendedor.userId
+    const userId = data.vendedor?.userId
+    if (!userId) return
     const check = async () => {
       try {
         const res = await fetch(`/api/instances/${userId}/status`, { cache: "no-store" })
@@ -1331,7 +1332,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
     check()
     instancePollRef.current = setInterval(check, 15000)
     return () => { clearInterval(instancePollRef.current!) }
-  }, [data.vendedor.userId])
+  }, [data.vendedor?.userId])
 
   // Toast: detect forceDispatch going true → false
   useEffect(() => {
@@ -1610,7 +1611,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 <div>
                   <p className="text-sm font-semibold text-slate-900 dark:text-white">Campanha já ativa</p>
                   <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    O vendedor <span className="font-medium text-slate-700 dark:text-slate-300">{data.vendedor.nome}</span> já possui {(data.vendedorRunningCampaigns ?? []).length === 1 ? "uma campanha" : `${(data.vendedorRunningCampaigns ?? []).length} campanhas`} em execução:
+                    O vendedor <span className="font-medium text-slate-700 dark:text-slate-300">{data.vendedor?.nome}</span> já possui {(data.vendedorRunningCampaigns ?? []).length === 1 ? "uma campanha" : `${(data.vendedorRunningCampaigns ?? []).length} campanhas`} em execução:
                   </p>
                 </div>
               </div>
@@ -1686,7 +1687,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 </>
               )}
               <span className="text-slate-300 dark:text-slate-700 text-xs">·</span>
-              <span className="text-xs text-slate-500 dark:text-slate-600">{data.vendedor.nome}</span>
+              <span className="text-xs text-slate-500 dark:text-slate-600">{data.vendedor?.nome}</span>
             </div>
           </div>
         </div>
@@ -1781,8 +1782,8 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
             )}
             <span className="font-medium">
               {instanceState === "connecting"
-                ? `Instância "${data.vendedor.nome}" está reconectando — envios pausados até reconectar`
-                : `Instância "${data.vendedor.nome}" está desconectada — os envios estão falhando`}
+                ? `Instância "${data.vendedor?.nome}" está reconectando — envios pausados até reconectar`
+                : `Instância "${data.vendedor?.nome}" está desconectada — os envios estão falhando`}
             </span>
             <a
               href="/instancias"
@@ -1818,7 +1819,7 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
         )}
         <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
           <Smartphone className="w-3 h-3" />
-          {data.vendedor.nome}
+          {data.vendedor?.nome}
         </span>
         <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
           <Clock className="w-3 h-3" />

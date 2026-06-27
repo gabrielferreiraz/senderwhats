@@ -16,10 +16,17 @@ import {
   Database,
   ChevronDown,
   CheckCheck,
+  Download,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
+  ListPlus,
+  ListMinus,
 } from "lucide-react"
 import { ImportCSVModal } from "./ImportCSVModal"
 import { NewListModal } from "./NewListModal"
 import { DeleteListModal } from "./DeleteListModal"
+import { ContactDrawer } from "./ContactDrawer"
 
 type ContactList = {
   id: string
@@ -82,6 +89,45 @@ function JourneyBadge({ journey }: { journey: string }) {
     <span className={`inline-block text-[10px] font-semibold px-1.5 py-0.5 rounded-full mt-0.5 ${cfg.cls}`}>
       {cfg.label}
     </span>
+  )
+}
+
+// ─── Sort header ──────────────────────────────────────────────────────────────
+
+function SortHeader({
+  col,
+  label,
+  sortBy,
+  sortDir,
+  onSort,
+}: {
+  col: string
+  label: string
+  sortBy: string
+  sortDir: string
+  onSort: (col: string) => void
+}) {
+  const active = sortBy === col
+  return (
+    <button
+      onClick={() => onSort(col)}
+      className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+        active
+          ? "text-violet-500 dark:text-violet-400"
+          : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
+      }`}
+    >
+      {label}
+      {active ? (
+        sortDir === "asc" ? (
+          <ArrowUp className="w-2.5 h-2.5" />
+        ) : (
+          <ArrowDown className="w-2.5 h-2.5" />
+        )
+      ) : (
+        <ChevronsUpDown className="w-2.5 h-2.5 opacity-40" />
+      )}
+    </button>
   )
 }
 
@@ -234,16 +280,28 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   const [loadingAllIds, setLoadingAllIds] = useState(false)
   const [markingAsSent, setMarkingAsSent] = useState(false)
   const [unmarkingAsSent, setUnmarkingAsSent] = useState(false)
-  const [bulkToast, setBulkToast] = useState<{ count: number; op: "mark" | "unmark" } | null>(null)
+  const [bulkDeleting, setBulkDeleting] = useState(false)
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false)
+  const [bulkToast, setBulkToast] = useState<{ count: number; op: "mark" | "unmark" | "delete" | "list-add" | "list-remove" } | null>(null)
+  const [createdAfter, setCreatedAfter] = useState("")
+  const [createdBefore, setCreatedBefore] = useState("")
+  const [sortBy, setSortBy] = useState("createdAt")
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc")
+  const [drawerContactId, setDrawerContactId] = useState<string | null>(null)
+  const [journeyCounts, setJourneyCounts] = useState<Record<string, number>>({})
+  const [bulkListId, setBulkListId] = useState("")
+  const [bulkListLoading, setBulkListLoading] = useState(false)
 
   const fetchContacts = useCallback(
-    async (p: number, q: string, listId: string | null, vendedorId: string, journey: string) => {
+    async (p: number, q: string, listId: string | null, vendedorId: string, journey: string, after: string, before: string, sBy = "createdAt", sDir = "desc") => {
       setLoadingContacts(true)
       try {
-        const params = new URLSearchParams({ page: String(p), limit: "20", search: q })
+        const params = new URLSearchParams({ page: String(p), limit: "20", search: q, sortBy: sBy, sortDir: sDir })
         if (listId) params.set("listId", listId)
         if (vendedorId) params.set("vendedorId", vendedorId)
         if (journey) params.set("journey", journey)
+        if (after) params.set("createdAfter", after)
+        if (before) params.set("createdBefore", before)
         const res = await fetch(`/api/contacts?${params}`, { cache: "no-store" })
         if (res.ok) {
           const data: { contacts: Contact[]; total: number; totalPages: number } = await res.json()
@@ -266,23 +324,36 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
     }
   }, [])
 
-  // Reset page + fetch when filters/search change (debounced)
+  const fetchJourneyCounts = useCallback(async (q: string, listId: string | null, vendedorId: string, after: string, before: string) => {
+    const params = new URLSearchParams()
+    if (q) params.set("search", q)
+    if (listId) params.set("listId", listId)
+    if (vendedorId) params.set("vendedorId", vendedorId)
+    if (after) params.set("createdAfter", after)
+    if (before) params.set("createdBefore", before)
+    const res = await fetch(`/api/contacts/journey-counts?${params}`, { cache: "no-store" })
+    if (res.ok) setJourneyCounts(await res.json() as Record<string, number>)
+  }, [])
+
+  // Reset page + fetch when filters/search/sort change (debounced)
   useEffect(() => {
     const timer = setTimeout(() => {
       isResettingPageRef.current = true
       setSelectedContactIds(new Set())
       setAllPagesSelected(false)
+      setConfirmBulkDelete(false)
       setPage(1)
-      fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney)
+      fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
+      fetchJourneyCounts(search, selectedListId, selectedVendedorId, createdAfter, createdBefore)
     }, 300)
     return () => clearTimeout(timer)
-  }, [search, selectedListId, selectedVendedorId, selectedJourney, fetchContacts])
+  }, [search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir, fetchContacts, fetchJourneyCounts])
 
   // Fetch when page changes; skip mount + skip programmatic resets (avoids double-fetch)
   useEffect(() => {
     if (!didMountRef.current) { didMountRef.current = true; return }
     if (isResettingPageRef.current) { isResettingPageRef.current = false; return }
-    fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney)
+    fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
   }, [page, fetchContacts]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleConfirmDelete = async (id: string) => {
@@ -343,20 +414,22 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
     setAllPagesSelected(true)
   }
 
+  const currentFilter = {
+    search: search || undefined,
+    listId: selectedListId ?? undefined,
+    vendedorId: selectedVendedorId || undefined,
+    journey: selectedJourney || undefined,
+    createdAfter: createdAfter || undefined,
+    createdBefore: createdBefore || undefined,
+  }
+
   const runBulkOp = async (op: "mark" | "unmark") => {
     if (!allPagesSelected && selectedContactIds.size === 0) return
     const endpoint = op === "mark" ? "/api/contacts/mark-sent" : "/api/contacts/unmark-sent"
     op === "mark" ? setMarkingAsSent(true) : setUnmarkingAsSent(true)
     try {
       const payload = allPagesSelected
-        ? {
-            filter: {
-              search: search || undefined,
-              listId: selectedListId ?? undefined,
-              vendedorId: selectedVendedorId || undefined,
-              journey: selectedJourney || undefined,
-            },
-          }
+        ? { filter: currentFilter }
         : { contactIds: Array.from(selectedContactIds) }
 
       const res = await fetch(endpoint, {
@@ -365,20 +438,95 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
         body: JSON.stringify(payload),
       })
       if (res.ok) {
-        const body = await res.json() as { updated: number }
-        setBulkToast({ count: body.updated, op })
+        const data = await res.json() as { updated: number }
+        setBulkToast({ count: data.updated, op })
         setTimeout(() => setBulkToast(null), 4500)
         setSelectedContactIds(new Set())
         setAllPagesSelected(false)
-        fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney)
+        fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
       }
     } finally {
       op === "mark" ? setMarkingAsSent(false) : setUnmarkingAsSent(false)
     }
   }
 
+  const runBulkDelete = async () => {
+    if (!allPagesSelected && selectedContactIds.size === 0) return
+    setBulkDeleting(true)
+    try {
+      const payload = allPagesSelected
+        ? { filter: currentFilter }
+        : { contactIds: Array.from(selectedContactIds) }
+
+      const res = await fetch("/api/contacts/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const data = await res.json() as { deleted: number }
+        setBulkToast({ count: data.deleted, op: "delete" })
+        setTimeout(() => setBulkToast(null), 4500)
+        setSelectedContactIds(new Set())
+        setAllPagesSelected(false)
+        setConfirmBulkDelete(false)
+        fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
+      }
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const handleSort = (col: string) => {
+    if (col === sortBy) {
+      setSortDir((d) => (d === "asc" ? "desc" : "asc"))
+    } else {
+      setSortBy(col)
+      setSortDir("desc")
+    }
+  }
+
+  const exportCSV = () => {
+    const params = new URLSearchParams()
+    if (search) params.set("search", search)
+    if (selectedListId) params.set("listId", selectedListId)
+    if (selectedVendedorId) params.set("vendedorId", selectedVendedorId)
+    if (selectedJourney) params.set("journey", selectedJourney)
+    if (createdAfter) params.set("createdAfter", createdAfter)
+    if (createdBefore) params.set("createdBefore", createdBefore)
+    const a = document.createElement("a")
+    a.href = `/api/contacts/export?${params}`
+    a.download = ""
+    a.click()
+  }
+
+  const runBulkList = async (action: "add" | "remove") => {
+    if (!bulkListId || (!allPagesSelected && selectedContactIds.size === 0)) return
+    setBulkListLoading(true)
+    try {
+      const payload = allPagesSelected
+        ? { listId: bulkListId, action, filter: currentFilter }
+        : { listId: bulkListId, action, contactIds: Array.from(selectedContactIds) }
+      const res = await fetch("/api/contacts/bulk-list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const data = await res.json() as { affected: number }
+        setBulkToast({ count: data.affected, op: action === "add" ? "list-add" : "list-remove" })
+        setTimeout(() => setBulkToast(null), 4500)
+        setSelectedContactIds(new Set())
+        setAllPagesSelected(false)
+        fetchContacts(page, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
+      }
+    } finally {
+      setBulkListLoading(false)
+    }
+  }
+
   const activeList = lists.find((l) => l.id === selectedListId)
-  const hasFilters = Boolean(selectedListId || selectedVendedorId || selectedJourney)
+  const hasFilters = Boolean(selectedListId || selectedVendedorId || selectedJourney || createdAfter || createdBefore)
 
   return (
     <>
@@ -391,15 +539,25 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             exit={{ opacity: 0, y: -12, scale: 0.96 }}
             transition={{ duration: 0.2 }}
             className={`fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-2xl border text-sm font-medium ${
-              bulkToast.op === "mark"
+              bulkToast.op === "mark" || bulkToast.op === "list-add"
                 ? "bg-emerald-50 dark:bg-[#0a1a12] border-emerald-200 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-400"
+                : bulkToast.op === "delete"
+                ? "bg-rose-50 dark:bg-[#1a0a0a] border-rose-200 dark:border-rose-500/30 text-rose-700 dark:text-rose-400"
                 : "bg-slate-50 dark:bg-[#111] border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300"
             }`}
           >
             <CheckCheck className="w-4 h-4 shrink-0" />
             <span>
               <strong>{bulkToast.count}</strong> contato{bulkToast.count !== 1 ? "s" : ""}{" "}
-              {bulkToast.op === "mark" ? "marcados como já enviado" : "desmarcados como enviado"}
+              {bulkToast.op === "mark"
+                ? "marcados como já enviado"
+                : bulkToast.op === "delete"
+                ? "excluídos"
+                : bulkToast.op === "list-add"
+                ? "adicionados à lista"
+                : bulkToast.op === "list-remove"
+                ? "removidos da lista"
+                : "desmarcados como enviado"}
             </span>
           </motion.div>
         )}
@@ -531,7 +689,16 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
               />
             </div>
             <motion.button
-  whileTap={{ scale: 0.97 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={exportCSV}
+              className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.07] transition-colors whitespace-nowrap"
+              title="Exportar contatos filtrados para CSV"
+            >
+              <Download className="w-4 h-4" />
+              Exportar
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
               onClick={() => setShowImport(true)}
               className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition-colors whitespace-nowrap"
             >
@@ -540,7 +707,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             </motion.button>
           </div>
 
-          {/* Row 2: Journey + Vendedor filters */}
+          {/* Row 2: Journey + Vendedor + Date filters */}
           <div className="flex items-center gap-2 flex-wrap">
             {/* Journey filter */}
             <FilterSelect
@@ -549,13 +716,19 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
               placeholder="Todas as jornadas"
               disabled={loadingContacts}
             >
-              <option value="sem_envio">Sem envio</option>
-              <option value="aguardando">Aguardando</option>
-              <option value="enviado">Enviado</option>
-              <option value="respondeu">Respondeu</option>
-              <option value="rmkt">Em Remarketing</option>
-              <option value="rmkt_concluido">Rmkt Concluído</option>
-              <option value="falhou">Falhou</option>
+              {([
+                ["sem_envio", "Sem envio"],
+                ["aguardando", "Aguardando"],
+                ["enviado", "Enviado"],
+                ["respondeu", "Respondeu"],
+                ["rmkt", "Em Remarketing"],
+                ["rmkt_concluido", "Rmkt Concluído"],
+                ["falhou", "Falhou"],
+              ] as [string, string][]).map(([val, lbl]) => (
+                <option key={val} value={val}>
+                  {lbl}{journeyCounts[val] != null ? ` (${journeyCounts[val].toLocaleString("pt-BR")})` : ""}
+                </option>
+              ))}
             </FilterSelect>
 
             {/* Vendedor filter */}
@@ -573,6 +746,35 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                 ))}
               </FilterSelect>
             )}
+
+            {/* Date range filter */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">De</span>
+              <input
+                type="date"
+                value={createdAfter}
+                onChange={(e) => setCreatedAfter(e.target.value)}
+                disabled={loadingContacts}
+                className="appearance-none bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 px-2.5 py-2 focus:outline-none focus:border-violet-500/40 transition-all cursor-pointer disabled:opacity-50 [color-scheme:dark]"
+              />
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">até</span>
+              <input
+                type="date"
+                value={createdBefore}
+                onChange={(e) => setCreatedBefore(e.target.value)}
+                disabled={loadingContacts}
+                className="appearance-none bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] rounded-xl text-xs font-medium text-slate-700 dark:text-slate-300 px-2.5 py-2 focus:outline-none focus:border-violet-500/40 transition-all cursor-pointer disabled:opacity-50 [color-scheme:dark]"
+              />
+              {(createdAfter || createdBefore) && (
+                <button
+                  onClick={() => { setCreatedAfter(""); setCreatedBefore("") }}
+                  className="text-[10px] text-slate-400 hover:text-rose-500 transition-colors"
+                  title="Limpar filtro de data"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
             {/* Active filter chips */}
             {hasFilters && (
@@ -596,7 +798,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                   </span>
                 )}
                 <button
-                  onClick={() => { setSelectedListId(null); setSelectedVendedorId(""); setSelectedJourney("") }}
+                  onClick={() => { setSelectedListId(null); setSelectedVendedorId(""); setSelectedJourney(""); setCreatedAfter(""); setCreatedBefore("") }}
                   className="text-[10px] font-medium text-slate-400 hover:text-rose-500 transition-colors px-1"
                 >
                   Limpar tudo
@@ -635,10 +837,10 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                   </button>
                 )}
 
-                <div className="flex items-center gap-1.5 ml-auto">
+                <div className="flex items-center gap-1.5 ml-auto flex-wrap">
                   <button
                     onClick={() => runBulkOp("mark")}
-                    disabled={markingAsSent || unmarkingAsSent}
+                    disabled={markingAsSent || unmarkingAsSent || bulkDeleting}
                     className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
                     title="Marca como já enviado — será pulado em novas campanhas"
                   >
@@ -647,20 +849,91 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                   </button>
                   <button
                     onClick={() => runBulkOp("unmark")}
-                    disabled={markingAsSent || unmarkingAsSent}
+                    disabled={markingAsSent || unmarkingAsSent || bulkDeleting}
                     className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-slate-200 transition-colors disabled:opacity-50"
                     title="Remove a marcação manual — contatos voltam a ser elegíveis para campanhas"
                   >
                     <CheckCheck className="w-3.5 h-3.5 opacity-40" />
                     {unmarkingAsSent ? "Desmarcando..." : "Desmarcar"}
                   </button>
+
+                  {/* Bulk delete com confirmação inline */}
+                  {confirmBulkDelete ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-rose-600 dark:text-rose-400 font-semibold">
+                        Excluir {allPagesSelected ? total.toLocaleString("pt-BR") : selectedContactIds.size} contato{selectedContactIds.size !== 1 ? "s" : ""}?
+                      </span>
+                      <button
+                        onClick={runBulkDelete}
+                        disabled={bulkDeleting}
+                        className="text-xs font-bold px-2.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white transition-colors disabled:opacity-50"
+                      >
+                        {bulkDeleting ? "Excluindo..." : "Confirmar"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmBulkDelete(false)}
+                        disabled={bulkDeleting}
+                        className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors px-1"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmBulkDelete(true)}
+                      disabled={markingAsSent || unmarkingAsSent || bulkDeleting}
+                      className="flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-500/20 transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir
+                    </button>
+                  )}
+
                   <button
-                    onClick={() => { setSelectedContactIds(new Set()); setAllPagesSelected(false) }}
+                    onClick={() => { setSelectedContactIds(new Set()); setAllPagesSelected(false); setConfirmBulkDelete(false) }}
                     className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors px-1"
                   >
                     ✕
                   </button>
                 </div>
+
+                {/* Bulk list actions */}
+                {lists.length > 0 && (
+                  <div className="w-full flex items-center gap-2 pt-2 border-t border-violet-200 dark:border-violet-500/20 flex-wrap">
+                    <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wider shrink-0">
+                      Lista:
+                    </span>
+                    <div className="relative">
+                      <select
+                        value={bulkListId}
+                        onChange={(e) => setBulkListId(e.target.value)}
+                        className="appearance-none bg-white dark:bg-white/[0.06] border border-violet-200 dark:border-violet-500/20 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 pl-2.5 pr-6 py-1.5 focus:outline-none focus:border-violet-500/40 transition-all cursor-pointer"
+                      >
+                        <option value="">Selecionar lista...</option>
+                        {lists.map((l) => (
+                          <option key={l.id} value={l.id}>{l.name}</option>
+                        ))}
+                      </select>
+                      <ChevronDown className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none" />
+                    </div>
+                    <button
+                      onClick={() => runBulkList("add")}
+                      disabled={!bulkListId || bulkListLoading}
+                      className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white transition-colors disabled:opacity-40"
+                    >
+                      <ListPlus className="w-3 h-3" />
+                      Adicionar
+                    </button>
+                    <button
+                      onClick={() => runBulkList("remove")}
+                      disabled={!bulkListId || bulkListLoading}
+                      className="flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-white dark:bg-white/[0.06] border border-violet-200 dark:border-violet-500/20 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-500/10 transition-colors disabled:opacity-40"
+                    >
+                      <ListMinus className="w-3 h-3" />
+                      Remover
+                    </button>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -668,18 +941,18 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
           {/* Table */}
           <div className="flex-1 rounded-xl border border-slate-200 dark:border-white/[0.06] bg-white dark:bg-white/[0.02] overflow-hidden flex flex-col">
             {/* Table header */}
-            <div className="grid grid-cols-[24px_2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 border-b border-slate-200 dark:border-white/[0.06] text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider bg-slate-50 dark:bg-white/[0.02]">
+            <div className="grid grid-cols-[24px_2fr_1.5fr_1fr_1fr_auto_40px] gap-3 px-5 py-3 border-b border-slate-200 dark:border-white/[0.06] bg-slate-50 dark:bg-white/[0.02]">
               <input
                 type="checkbox"
                 className="rounded border-slate-300 dark:border-slate-600 w-3.5 h-3.5 accent-violet-600"
                 checked={contacts.length > 0 && selectedContactIds.size === contacts.length}
                 onChange={toggleAll}
               />
-              <span>Contato / Jornada</span>
-              <span>Telefone</span>
-              <span>Variáveis</span>
-              <span>Listas</span>
-              <span>Data</span>
+              <SortHeader col="name" label="Contato / Jornada" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <SortHeader col="phone" label="Telefone" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Variáveis</span>
+              <span className="text-[10px] font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Listas</span>
+              <SortHeader col="createdAt" label="Data" sortBy={sortBy} sortDir={sortDir} onSort={handleSort} />
               <span />
             </div>
 
@@ -739,7 +1012,10 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                           />
 
                           {/* Name + journey badge */}
-                          <div className="flex items-center gap-3 min-w-0">
+                          <button
+                            onClick={() => setDrawerContactId(c.id)}
+                            className="flex items-center gap-3 min-w-0 text-left hover:opacity-80 transition-opacity"
+                          >
                             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-100 to-indigo-100 dark:from-violet-600/30 dark:to-indigo-600/30 flex items-center justify-center text-[10px] font-bold text-violet-600 dark:text-violet-300 shrink-0">
                               {(c.name ?? c.phone)?.[0]?.toUpperCase() ?? "?"}
                             </div>
@@ -749,7 +1025,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
                               </p>
                               <JourneyBadge journey={c.journey} />
                             </div>
-                          </div>
+                          </button>
 
                           {/* Phone */}
                           <div className="flex items-center gap-1.5 text-slate-500 dark:text-slate-400">
@@ -876,7 +1152,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             vendedores={vendedores}
             onClose={() => setShowImport(false)}
             onSuccess={() => {
-              fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney)
+              fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
               fetchLists()
             }}
             onListCreated={(newList) =>
@@ -909,6 +1185,19 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
         onClose={() => { if (!deletingList) setDeleteTarget(null) }}
         deleting={deletingList}
       />
+
+      {/* Contact drawer */}
+      <AnimatePresence>
+        {drawerContactId && (
+          <ContactDrawer
+            contactId={drawerContactId}
+            onClose={() => setDrawerContactId(null)}
+            onNameChange={(id, name) =>
+              setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)))
+            }
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {deleteResult && (

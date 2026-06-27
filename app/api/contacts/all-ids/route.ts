@@ -7,10 +7,12 @@ const ID_CAP = 5_000
 export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const filter = {
-    listId:     sp.get("listId")            ?? undefined,
-    vendedorId: sp.get("vendedorId")        ?? undefined,
-    journey:    sp.get("journey")           ?? undefined,
-    search:     sp.get("search")?.trim()    ?? undefined,
+    listId:        sp.get("listId")         ?? undefined,
+    vendedorId:    sp.get("vendedorId")     ?? undefined,
+    journey:       sp.get("journey")        ?? undefined,
+    search:        sp.get("search")?.trim() ?? undefined,
+    createdAfter:  sp.get("createdAfter")   ?? undefined,
+    createdBefore: sp.get("createdBefore")  ?? undefined,
   }
 
   const where = await buildContactWhere(filter)
