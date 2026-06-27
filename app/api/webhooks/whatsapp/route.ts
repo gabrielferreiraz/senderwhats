@@ -21,6 +21,17 @@ function normalizePhone(raw: string): string {
   return "55" + clean
 }
 
+/** Mapeia o type do WhatsApp para o mediaType interno do chat */
+function resolveMediaType(type?: string, hasMedia?: boolean): string {
+  if (!type || type === "chat") return "text"
+  if (type === "image" || type === "sticker") return "image"
+  if (type === "ptt" || type === "audio") return "audio"
+  if (type === "video") return "video"
+  if (type === "document") return "document"
+  if (hasMedia) return "media"
+  return "text"
+}
+
 /** Variações do mesmo número (com e sem o 9º dígito) para matching mais robusto */
 function phoneVariants(normalized: string): string[] {
   const variants = new Set<string>([normalized])
@@ -62,6 +73,8 @@ export async function POST(req: NextRequest) {
     from?: string
     body?: string
     timestamp?: number
+    type?: string    // "chat" | "image" | "ptt" | "audio" | "video" | "document" | "sticker"
+    hasMedia?: boolean
     [key: string]: unknown
   }
 
@@ -114,7 +127,7 @@ export async function POST(req: NextRequest) {
   // Busca o contato pelas variantes do número
   const contact = await prisma.contact.findFirst({
     where: { phone: { in: variants } },
-    select: { id: true, phone: true },
+    select: { id: true, phone: true, name: true },
   })
 
   console.log("[webhook/whatsapp] 👤 Contato:", contact ? `encontrado (${contact.phone})` : "não encontrado")
@@ -189,14 +202,15 @@ export async function POST(req: NextRequest) {
   }
 
   // Persist incoming message to chat history (fire-and-forget)
+  // Use resolved vendedor.userId so the key matches chat queries; fall back to rawInstanceId
   prisma.whatsAppChat.create({
     data: {
-      userId: rawInstanceId,
+      userId: vendedor?.userId ?? rawInstanceId,
       contactPhone: normalizedFrom,
-      contactName: contact ? null : null, // resolved asynchronously if needed
+      contactName: contact?.name ?? null,
       direction: "in",
       body: String(body.body ?? ""),
-      mediaType: "text",
+      mediaType: resolveMediaType(body.type, body.hasMedia),
       ackStatus: 0,
       timestamp: body.timestamp ? new Date(body.timestamp * 1000) : now,
     },

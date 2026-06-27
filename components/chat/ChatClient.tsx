@@ -12,6 +12,9 @@ import {
   Image,
   Mic,
   Search,
+  Video,
+  FileText,
+  Smile,
 } from "lucide-react"
 
 type Vendedor = { id: string; nome: string; userId: string }
@@ -69,9 +72,26 @@ function displayName(phone: string, name: string | null) {
 }
 
 function previewBody(body: string, mediaType: string) {
-  if (mediaType === "image") return "📷 Imagem"
-  if (mediaType === "audio") return "🎙️ Áudio"
+  if (mediaType === "image")    return body ? `📷 ${body}` : "📷 Imagem"
+  if (mediaType === "audio")    return "🎙️ Áudio"
+  if (mediaType === "video")    return body ? `🎥 ${body}` : "🎥 Vídeo"
+  if (mediaType === "document") return body ? `📄 ${body}` : "📄 Documento"
+  if (mediaType === "sticker" || mediaType === "media") return "🖼️ Mídia"
   return body.length > 40 ? body.slice(0, 40) + "…" : body
+}
+
+function MediaIndicator({ mediaType, body }: { mediaType: string; body: string }) {
+  if (mediaType === "image")
+    return <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1"><Image className="w-3.5 h-3.5" /><span>Imagem</span></div>
+  if (mediaType === "audio")
+    return <div className="flex items-center gap-1.5 text-xs opacity-80"><Mic className="w-3.5 h-3.5" /><span>Áudio</span></div>
+  if (mediaType === "video")
+    return <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1"><Video className="w-3.5 h-3.5" /><span>Vídeo</span></div>
+  if (mediaType === "document")
+    return <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1"><FileText className="w-3.5 h-3.5" /><span>Documento</span></div>
+  if (mediaType === "sticker" || mediaType === "media")
+    return <div className="flex items-center gap-1.5 text-xs opacity-80"><Smile className="w-3.5 h-3.5" /><span>Mídia</span></div>
+  return null
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -325,18 +345,7 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
                             }`}
                           >
                             {/* Media indicator */}
-                            {m.mediaType === "image" && (
-                              <div className="flex items-center gap-1.5 text-xs opacity-80 mb-1">
-                                <Image className="w-3.5 h-3.5" />
-                                <span>Imagem</span>
-                              </div>
-                            )}
-                            {m.mediaType === "audio" && (
-                              <div className="flex items-center gap-1.5 text-xs opacity-80">
-                                <Mic className="w-3.5 h-3.5" />
-                                <span>Áudio</span>
-                              </div>
-                            )}
+                            <MediaIndicator mediaType={m.mediaType} body={m.body} />
 
                             {/* Body */}
                             {m.body && (
