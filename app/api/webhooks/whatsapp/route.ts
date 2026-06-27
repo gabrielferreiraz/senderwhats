@@ -188,6 +188,20 @@ export async function POST(req: NextRequest) {
     console.log("[webhook/whatsapp] 🛑 RemarketingLeads marcados como replied + completed:", rmktResult.count)
   }
 
+  // Persist incoming message to chat history (fire-and-forget)
+  prisma.whatsAppChat.create({
+    data: {
+      userId: rawInstanceId,
+      contactPhone: normalizedFrom,
+      contactName: contact ? null : null, // resolved asynchronously if needed
+      direction: "in",
+      body: String(body.body ?? ""),
+      mediaType: "text",
+      ackStatus: 0,
+      timestamp: body.timestamp ? new Date(body.timestamp * 1000) : now,
+    },
+  }).catch((e) => console.error("[webhook/whatsapp] ⚠️ Erro ao salvar chat:", e))
+
   if (tasks.length > 0) await Promise.all(tasks)
 
   const response = {

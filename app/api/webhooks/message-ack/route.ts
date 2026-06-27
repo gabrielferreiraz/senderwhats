@@ -25,13 +25,16 @@ export async function POST(req: NextRequest) {
   }
 
   // Only update if the new ack is higher than the current one (events can arrive out of order)
-  await prisma.campaignMessage.updateMany({
-    where: {
-      whatsappMsgId: messageId,
-      ackStatus: { lt: ack },
-    },
-    data: { ackStatus: ack },
-  })
+  await Promise.all([
+    prisma.campaignMessage.updateMany({
+      where: { whatsappMsgId: messageId, ackStatus: { lt: ack } },
+      data: { ackStatus: ack },
+    }),
+    prisma.whatsAppChat.updateMany({
+      where: { whatsappMsgId: messageId, ackStatus: { lt: ack } },
+      data: { ackStatus: ack },
+    }),
+  ])
 
   return NextResponse.json({ ok: true })
 }

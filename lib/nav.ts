@@ -4,6 +4,7 @@ import {
   Users,
   Megaphone,
   FileCode,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react"
 
@@ -19,4 +20,5 @@ export const navItems: NavItem[] = [
   { href: "/contatos", label: "Contatos", Icon: Users },
   { href: "/campanhas", label: "Campanhas", Icon: Megaphone },
   { href: "/scripts", label: "Scripts", Icon: FileCode },
+  { href: "/chat", label: "Chat", Icon: MessageCircle },
 ]

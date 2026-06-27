@@ -159,6 +159,29 @@ async function sendText(userId: string, number: string, message: string): Promis
   }
 }
 
+function saveOutgoingChat(
+  userId: string,
+  contactPhone: string,
+  contactName: string | null | undefined,
+  body: string,
+  mediaType: string,
+  waMsgId: string | null,
+) {
+  prisma.whatsAppChat.create({
+    data: {
+      userId,
+      contactPhone,
+      contactName: contactName ?? null,
+      direction: "out",
+      body,
+      mediaType,
+      whatsappMsgId: waMsgId,
+      ackStatus: waMsgId ? 1 : 0,
+      timestamp: new Date(),
+    },
+  }).catch((e: unknown) => log("⚠️", `saveOutgoingChat falhou: ${e instanceof Error ? e.message : e}`))
+}
+
 const MIME_MAP: Record<string, string> = {
   jpg: "image/jpeg",
   jpeg: "image/jpeg",
@@ -488,6 +511,7 @@ async function processMessage(
       const waMsgId = await sendText(vendedorUserId, phone, text)
       log("✅", `Msg direta → ${phone} (${contact.name ?? "sem nome"})`)
       await updateMsg(msgId, { status: "COMPLETED", sentAt: new Date(), nextSendAt: null, ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) })
+      saveOutgoingChat(vendedorUserId, phone, contact.name, text, "text", waMsgId)
       await markContactContacted(contactId)
     } catch (err: unknown) {
       const reason = err instanceof Error ? err.message : String(err)
@@ -537,18 +561,24 @@ async function processMessage(
 
   try {
     let waMsgId: string | null = null
+    let sentBody = ""
+    let sentMediaType = "text"
     if (isImage) {
       const caption = applyVariables(processSpintax(step.body), contact)
       waMsgId = await sendImage(vendedorUserId, phone, step.imageUrl!, caption)
       log("🖼️", `Passo ${currentStep} (imagem) → ${phone} (${contact.name ?? "sem nome"})`)
+      sentBody = caption; sentMediaType = "image"
     } else if (isAudio) {
       waMsgId = await sendAudio(vendedorUserId, phone, step.audioUrl!)
       log("🎙️", `Passo ${currentStep} (áudio) → ${phone} (${contact.name ?? "sem nome"})`)
+      sentBody = ""; sentMediaType = "audio"
     } else {
       const text = applyVariables(processSpintax(step.body), contact)
       waMsgId = await sendText(vendedorUserId, phone, text)
       log("✅", `Passo ${currentStep} → ${phone} (${contact.name ?? "sem nome"})`)
+      sentBody = text; sentMediaType = "text"
     }
+    saveOutgoingChat(vendedorUserId, phone, contact.name, sentBody, sentMediaType, waMsgId)
 
     const waFields = { ackStatus: 1, ...(waMsgId && { whatsappMsgId: waMsgId }) }
 
@@ -1090,11 +1120,13 @@ async function remarketingTick(): Promise<void> {
                   try {
                     if (step.stepType === "image" && step.imageUrl) {
                       const caption = applyVariables(processSpintax(step.body), contactLike)
-                      await sendImage(userId, phone, step.imageUrl, caption)
+                      const wId = await sendImage(userId, phone, step.imageUrl, caption)
                       log("🖼️", `Remarketing "${campaign.name}": passo ${lead.currentStep} (img) → ${phone}`)
+                      saveOutgoingChat(userId, phone, lead.name, caption, "image", wId)
                     } else if (step.stepType === "audio" && step.audioUrl) {
-                      await sendAudio(userId, phone, step.audioUrl)
+                      const wId = await sendAudio(userId, phone, step.audioUrl)
                       log("🎙️", `Remarketing "${campaign.name}": passo ${lead.currentStep} (áudio) → ${phone}`)
+                      saveOutgoingChat(userId, phone, lead.name, "", "audio", wId)
                     } else if (step.stepType === "image") {
                       sendError = "image sem imageUrl"
                       log("⏩", `Remarketing "${campaign.name}": imagem sem URL — pulando ${phone}`)
@@ -1103,8 +1135,9 @@ async function remarketingTick(): Promise<void> {
                       log("⏩", `Remarketing "${campaign.name}": áudio sem arquivo — pulando ${phone}`)
                     } else {
                       const text = applyVariables(processSpintax(step.body), contactLike)
-                      await sendText(userId, phone, text)
+                      const wId = await sendText(userId, phone, text)
                       log("📲", `Remarketing "${campaign.name}": passo ${lead.currentStep} → ${phone}`)
+                      saveOutgoingChat(userId, phone, lead.name, text, "text", wId)
                     }
                   } catch (err: unknown) {
                     sendError = errMsg(err)

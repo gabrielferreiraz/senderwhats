@@ -209,3 +209,23 @@ model RemarketingLead {
   @@index([userId, status])
   @@index([campaignId, status])
 }
+
+// ─── Chat em tempo real ───────────────────────────────────────────────────────
+
+model WhatsAppChat {
+  id            String   @id @default(cuid())
+  userId        String   // vendedor's userId (WhatsApp instance)
+  contactPhone  String   // normalized phone
+  contactName   String?  // denormalized for display
+  direction     String   // "in" | "out"
+  body          String
+  mediaType     String   @default("text") // "text" | "image" | "audio"
+  whatsappMsgId String?  // WhatsApp internal msg ID (for ACK updates)
+  ackStatus     Int      @default(0) // 0=unknown 1=sent 2=delivered 3=read
+  timestamp     DateTime
+  createdAt     DateTime @default(now())
+
+  @@index([userId, contactPhone, timestamp])
+  @@index([userId, timestamp])
+  @@index([whatsappMsgId])
+}
