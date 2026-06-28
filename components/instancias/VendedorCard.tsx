@@ -41,8 +41,7 @@ function resolveStatus(data: InstanceStatus | null, isLoading: boolean): Display
   if (isLoading) return "loading"
   if (!data) return "disconnected"
   if (data.status === "ready") return "online"
-  if (data.state === "OPENING" || (!data.authenticated && data.state !== "DISCONNECTED"))
-    return "waiting_qr"
+  if (data.state === "connecting") return "waiting_qr"
   return "disconnected"
 }
 
