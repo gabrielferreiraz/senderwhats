@@ -1,11 +1,13 @@
 import { prisma } from "@/lib/prisma"
 import { CampaignsList } from "@/components/campanhas/CampaignsList"
+import { CampanhasNav } from "@/components/campanhas/CampanhasNav"
 
 export const dynamic = "force-dynamic"
 
 export default async function CampanhasPage() {
-  const [campaigns, messageCounts, rmktPendingCounts] = await Promise.all([
+  const [campaigns, messageCounts, rmktPendingCounts, draftCount] = await Promise.all([
     prisma.campaign.findMany({
+      where: { status: { not: "DRAFT" } },
       orderBy: { createdAt: "desc" },
       include: {
         vendedor: { select: { nome: true, userId: true } },
@@ -23,6 +25,7 @@ export default async function CampanhasPage() {
       where: { status: "pending", campaignId: { not: null } },
       _count: { _all: true },
     }),
+    prisma.campaign.count({ where: { status: "DRAFT" } }),
   ])
 
   const statsMap = new Map<string, Record<string, number>>()
@@ -54,6 +57,7 @@ export default async function CampanhasPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
+      <CampanhasNav draftCount={draftCount} />
       <CampaignsList initial={serialized} />
     </div>
   )
