@@ -1,13 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 
-const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET ?? ""
-
 export async function POST(req: NextRequest) {
-  // Optional shared secret — if set, validate it
-  if (WEBHOOK_SECRET) {
-    const incoming = req.headers.get("x-webhook-secret") ?? ""
-    if (incoming !== WEBHOOK_SECRET) {
+  // Same auth as /webhooks/whatsapp — Authorization: Bearer <WEBHOOK_SECRET>
+  const secret = process.env.WEBHOOK_SECRET
+  if (secret) {
+    const auth = req.headers.get("authorization") ?? ""
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : auth
+    // Also accept legacy x-webhook-secret header during transition
+    const legacy = req.headers.get("x-webhook-secret") ?? ""
+    if (token !== secret && legacy !== secret) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
   }

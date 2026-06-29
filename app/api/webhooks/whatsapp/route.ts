@@ -73,18 +73,22 @@ export async function POST(req: NextRequest) {
     from?: string
     body?: string
     timestamp?: number
-    type?: string    // "chat" | "image" | "ptt" | "audio" | "video" | "document" | "sticker"
+    type?: string       // "chat" | "image" | "ptt" | "audio" | "video" | "document" | "sticker"
     hasMedia?: boolean
+    messageId?: string  // Baileys key.id — used for deduplication when syncFullHistory is enabled
     [key: string]: unknown
   }
 
+  const KNOWN_KEYS = new Set(["userId","instanceId","from","body","timestamp","type","hasMedia","messageId"])
   console.log("[webhook/whatsapp] 📨 Evento recebido:", JSON.stringify({
     userId: body.userId,
     instanceId: body.instanceId,
     from: body.from,
     body: body.body?.slice(0, 80),
-    timestamp: body.timestamp,
-    extraKeys: Object.keys(body).filter(k => !["userId","instanceId","from","body","timestamp"].includes(k)),
+    type: body.type,
+    hasMedia: body.hasMedia,
+    messageId: body.messageId,
+    extraKeys: Object.keys(body).filter(k => !KNOWN_KEYS.has(k)),
   }))
 
   const rawInstanceId = body.userId ?? body.instanceId
@@ -131,8 +135,6 @@ export async function POST(req: NextRequest) {
   })
 
   console.log("[webhook/whatsapp] 👤 Contato:", contact ? `encontrado (${contact.phone})` : "não encontrado")
-
-  const tasks: Promise<unknown>[] = []
 
   // Descobre quais campanhas têm remarketing pendente para esse número ANTES de marcá-las
   // Isso permite atribuir corretamente: quem respondeu ao follow-up vs à mensagem original
@@ -202,7 +204,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Persist incoming message to chat history (fire-and-forget)
-  // Use resolved vendedor.userId so the key matches chat queries; fall back to rawInstanceId
+  // whatsappMsgId stored when API sends messageId — enables deduplication for syncFullHistory
   prisma.whatsAppChat.create({
     data: {
       userId: vendedor?.userId ?? rawInstanceId,
@@ -211,12 +213,11 @@ export async function POST(req: NextRequest) {
       direction: "in",
       body: String(body.body ?? ""),
       mediaType: resolveMediaType(body.type, body.hasMedia),
+      whatsappMsgId: body.messageId ?? null,
       ackStatus: 0,
       timestamp: body.timestamp ? new Date(body.timestamp * 1000) : now,
     },
   }).catch((e) => console.error("[webhook/whatsapp] ⚠️ Erro ao salvar chat:", e))
-
-  if (tasks.length > 0) await Promise.all(tasks)
 
   const response = {
     ok: true,
