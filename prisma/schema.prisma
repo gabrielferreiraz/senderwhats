@@ -227,5 +227,5 @@ model WhatsAppChat {
 
   @@index([userId, contactPhone, timestamp])
   @@index([userId, timestamp])
-  @@index([whatsappMsgId])
+  @@unique([whatsappMsgId])
 }

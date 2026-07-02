@@ -73,21 +73,23 @@ export async function POST(req: NextRequest) {
     from?: string
     body?: string
     timestamp?: number
-    type?: string       // "chat" | "image" | "ptt" | "audio" | "video" | "document" | "sticker"
+    type?: string            // "chat" | "image" | "ptt" | "audio" | "video" | "document" | "sticker"
     hasMedia?: boolean
-    messageId?: string  // Baileys key.id — used for deduplication when syncFullHistory is enabled
+    fromMe?: boolean         // true = mensagem enviada pela própria instância
+    whatsappMessageId?: string  // Baileys key.id — usado para deduplicação
     [key: string]: unknown
   }
 
-  const KNOWN_KEYS = new Set(["userId","instanceId","from","body","timestamp","type","hasMedia","messageId"])
+  const KNOWN_KEYS = new Set(["userId","instanceId","from","body","timestamp","type","hasMedia","fromMe","whatsappMessageId"])
   console.log("[webhook/whatsapp] 📨 Evento recebido:", JSON.stringify({
     userId: body.userId,
     instanceId: body.instanceId,
     from: body.from,
+    fromMe: body.fromMe,
     body: body.body?.slice(0, 80),
     type: body.type,
     hasMedia: body.hasMedia,
-    messageId: body.messageId,
+    whatsappMessageId: body.whatsappMessageId,
     extraKeys: Object.keys(body).filter(k => !KNOWN_KEYS.has(k)),
   }))
 
@@ -112,6 +114,7 @@ export async function POST(req: NextRequest) {
   const normalizedFrom = normalizePhone(from)
   const variants = phoneVariants(normalizedFrom)
   const now = new Date()
+  const isFromMe = body.fromMe === true
 
   console.log("[webhook/whatsapp] 📱 from bruto:", from, "→ normalizado:", normalizedFrom, "variantes:", variants)
 
@@ -136,94 +139,98 @@ export async function POST(req: NextRequest) {
 
   console.log("[webhook/whatsapp] 👤 Contato:", contact ? `encontrado (${contact.phone})` : "não encontrado")
 
-  // Descobre quais campanhas têm remarketing pendente para esse número ANTES de marcá-las
-  // Isso permite atribuir corretamente: quem respondeu ao follow-up vs à mensagem original
-  const pendingRmktLeads = vendedor
-    ? await prisma.remarketingLead.findMany({
-        where: {
-          number: { in: variants },
-          status: "pending",
-          replied: false,
-          userId: vendedor.userId,
-        },
-        select: { campaignId: true },
-      })
-    : []
+  // Processamento de replied/remarketing apenas para mensagens recebidas (não as que nós enviamos)
+  if (!isFromMe) {
+    // Descobre quais campanhas têm remarketing pendente para esse número ANTES de marcá-las
+    // Isso permite atribuir corretamente: quem respondeu ao follow-up vs à mensagem original
+    const pendingRmktLeads = vendedor
+      ? await prisma.remarketingLead.findMany({
+          where: {
+            number: { in: variants },
+            status: "pending",
+            replied: false,
+            userId: vendedor.userId,
+          },
+          select: { campaignId: true },
+        })
+      : []
 
-  const rmktCampaignIds = pendingRmktLeads
-    .map((l) => l.campaignId)
-    .filter((id): id is string => id !== null)
+    const rmktCampaignIds = pendingRmktLeads
+      .map((l) => l.campaignId)
+      .filter((id): id is string => id !== null)
 
-  if (contact && vendedor) {
-    const baseWhere = {
-      contactId: contact.id,
-      replied: false,
-      campaign: { vendedorId: vendedor.id },
-      status: { in: ["PENDING", "SENDING", "SENT", "COMPLETED"] as MessageStatus[] },
+    if (contact && vendedor) {
+      const baseWhere = {
+        contactId: contact.id,
+        replied: false,
+        campaign: { vendedorId: vendedor.id },
+        status: { in: ["PENDING", "SENDING", "SENT", "COMPLETED"] as MessageStatus[] },
+      }
+
+      let total = 0
+      if (rmktCampaignIds.length > 0) {
+        // Respondeu ao follow-up: campanha com remarketing pendente
+        const r1 = await prisma.campaignMessage.updateMany({
+          where: { ...baseWhere, campaignId: { in: rmktCampaignIds } },
+          data: { replied: true, repliedAt: now, repliedViaRemarketing: true },
+        })
+        // Respondeu diretamente: demais campanhas ativas desse vendedor
+        const r2 = await prisma.campaignMessage.updateMany({
+          where: { ...baseWhere, campaignId: { notIn: rmktCampaignIds } },
+          data: { replied: true, repliedAt: now },
+        })
+        total = r1.count + r2.count
+      } else {
+        const r = await prisma.campaignMessage.updateMany({
+          where: baseWhere,
+          data: { replied: true, repliedAt: now },
+        })
+        total = r.count
+      }
+      console.log(
+        "[webhook/whatsapp] 📨 CampaignMessages marcados como replied:",
+        total,
+        rmktCampaignIds.length > 0 ? `(${rmktCampaignIds.length} via remarketing)` : "(direto)"
+      )
     }
 
-    let total = 0
-    if (rmktCampaignIds.length > 0) {
-      // Respondeu ao follow-up: campanha com remarketing pendente
-      const r1 = await prisma.campaignMessage.updateMany({
-        where: { ...baseWhere, campaignId: { in: rmktCampaignIds } },
-        data: { replied: true, repliedAt: now, repliedViaRemarketing: true },
-      })
-      // Respondeu diretamente: demais campanhas ativas desse vendedor
-      const r2 = await prisma.campaignMessage.updateMany({
-        where: { ...baseWhere, campaignId: { notIn: rmktCampaignIds } },
-        data: { replied: true, repliedAt: now },
-      })
-      total = r1.count + r2.count
-    } else {
-      const r = await prisma.campaignMessage.updateMany({
-        where: baseWhere,
-        data: { replied: true, repliedAt: now },
-      })
-      total = r.count
+    // Marca TODOS os leads de remarketing pendentes desse número como respondidos
+    const rmktResult = await prisma.remarketingLead.updateMany({
+      where: {
+        number: { in: variants },
+        status: "pending",
+        replied: false,
+        ...(vendedor ? { userId: vendedor.userId } : {}),
+      },
+      data: { replied: true, repliedAt: now, status: "completed" },
+    })
+    if (rmktResult.count > 0) {
+      console.log("[webhook/whatsapp] 🛑 RemarketingLeads marcados como replied + completed:", rmktResult.count)
     }
-    console.log(
-      "[webhook/whatsapp] 📨 CampaignMessages marcados como replied:",
-      total,
-      rmktCampaignIds.length > 0 ? `(${rmktCampaignIds.length} via remarketing)` : "(direto)"
-    )
   }
 
-  // Marca TODOS os leads de remarketing pendentes desse número como respondidos
-  const rmktResult = await prisma.remarketingLead.updateMany({
-    where: {
-      number: { in: variants },
-      status: "pending",
-      replied: false,
-      ...(vendedor ? { userId: vendedor.userId } : {}),
-    },
-    data: { replied: true, repliedAt: now, status: "completed" },
-  })
-  if (rmktResult.count > 0) {
-    console.log("[webhook/whatsapp] 🛑 RemarketingLeads marcados como replied + completed:", rmktResult.count)
-  }
-
-  // Persist incoming message to chat history (fire-and-forget)
-  // whatsappMsgId stored when API sends messageId — enables deduplication for syncFullHistory
-  prisma.whatsAppChat.create({
-    data: {
+  // Persist message to chat history (fire-and-forget)
+  // Uses createMany + skipDuplicates for deduplication: worker may already have saved outgoing msgs
+  prisma.whatsAppChat.createMany({
+    data: [{
       userId: vendedor?.userId ?? rawInstanceId,
       contactPhone: normalizedFrom,
       contactName: contact?.name ?? null,
-      direction: "in",
+      direction: isFromMe ? "out" : "in",
       body: String(body.body ?? ""),
       mediaType: resolveMediaType(body.type, body.hasMedia),
-      whatsappMsgId: body.messageId ?? null,
-      ackStatus: 0,
+      whatsappMsgId: body.whatsappMessageId ?? null,
+      ackStatus: isFromMe ? 1 : 0,
       timestamp: body.timestamp ? new Date(body.timestamp * 1000) : now,
-    },
+    }],
+    skipDuplicates: true,
   }).catch((e) => console.error("[webhook/whatsapp] ⚠️ Erro ao salvar chat:", e))
 
   const response = {
     ok: true,
+    fromMe: isFromMe,
     vendedor: vendedor?.userId ?? null,
     contact: !!contact,
-    lead: rmktResult.count > 0,
   }
   console.log("[webhook/whatsapp] ✅ Processado:", response)
   return NextResponse.json(response)
