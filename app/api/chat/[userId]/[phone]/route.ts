@@ -55,7 +55,15 @@ export async function POST(
     return NextResponse.json({ error: "Mensagem vazia" }, { status: 400 })
   }
 
-  const result = await whatsapp.sendText(userId, phone, message.trim())
+  let whatsappMessageId: string | null = null
+  try {
+    const result = await whatsapp.sendText(userId, phone, message.trim())
+    whatsappMessageId = result.whatsappMessageId ?? null
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`[chat/send] ❌ Falha ao enviar para ${phone} via ${userId}:`, msg)
+    return NextResponse.json({ error: msg }, { status: 502 })
+  }
 
   const saved = await prisma.whatsAppChat.create({
     data: {
@@ -65,7 +73,7 @@ export async function POST(
       direction: "out",
       body: message.trim(),
       mediaType: "text",
-      whatsappMsgId: result.whatsappMessageId ?? null,
+      whatsappMsgId: whatsappMessageId,
       ackStatus: 1,
       timestamp: new Date(),
     },

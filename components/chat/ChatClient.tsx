@@ -177,6 +177,7 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [mobileChat,     setMobileChat]     = useState(false)
   const [inputText,      setInputText]      = useState("")
   const [sending,        setSending]        = useState(false)
+  const [sendError,      setSendError]      = useState<string | null>(null)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const pollConvRef  = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -243,36 +244,29 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
     if (!inputText.trim() || !selectedPhone || sending) return
     const text = inputText.trim()
     setInputText("")
+    setSendError(null)
     setSending(true)
-    // Optimistic: add message immediately
-    const optimistic: Message = {
-      id: `opt-${Date.now()}`,
-      direction: "out",
-      body: text,
-      mediaType: "text",
-      whatsappMsgId: null,
-      ackStatus: 0,
-      timestamp: new Date().toISOString(),
-    }
-    setMessages((prev) => [...prev, optimistic])
     try {
       const res = await fetch(
         `/api/chat/${selectedUserId}/${encodeURIComponent(selectedPhone)}`,
         { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) }
       )
       if (res.ok) {
-        const saved = await res.json() as Message
-        // Replace optimistic entry with the real one from DB
-        setMessages((prev) => prev.map((m) => m.id === optimistic.id ? saved : m))
+        // Refetch real messages from DB — without race conditions
+        await fetchMessages(selectedUserId, selectedPhone)
+      } else {
+        const data = await res.json().catch(() => ({})) as { error?: string }
+        setSendError(data.error ?? "Erro ao enviar mensagem")
+        setInputText(text) // Devolve o texto para o usuário tentar de novo
       }
     } catch {
-      // On error, keep the message but mark ackStatus as -1 (error indicator)
-      setMessages((prev) => prev.map((m) => m.id === optimistic.id ? { ...m, ackStatus: -1 } : m))
+      setSendError("Sem conexão com o servidor")
+      setInputText(text)
     } finally {
       setSending(false)
       inputRef.current?.focus()
     }
-  }, [inputText, selectedPhone, selectedUserId, sending])
+  }, [inputText, selectedPhone, selectedUserId, sending, fetchMessages])
 
   const selectedVendedor = vendedores.find((v) => v.userId === selectedUserId)
 
@@ -594,6 +588,14 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
 
             {/* ── Input bar ────────────────────────────── */}
             <div className="px-4 py-3 bg-white dark:bg-[#0d1120] border-t border-slate-200 dark:border-white/[0.06] shrink-0">
+              {sendError && (
+                <div className="flex items-center justify-between mb-2 px-3 py-1.5 rounded-lg bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/20">
+                  <span className="text-[12px] text-red-600 dark:text-red-400">{sendError}</span>
+                  <button onClick={() => setSendError(null)} className="ml-2 text-red-400 hover:text-red-600 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
               <div className="flex items-end gap-2">
                 <textarea
                   ref={inputRef}
