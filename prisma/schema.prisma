@@ -229,3 +229,15 @@ model WhatsAppChat {
   @@index([userId, timestamp])
   @@unique([whatsappMsgId])
 }
+
+// ─── Eventos de sessão do vendedor ───────────────────────────────────────────
+
+model VendedorEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  event     String   // "disconnected" | "reconnecting" | "connected"
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
