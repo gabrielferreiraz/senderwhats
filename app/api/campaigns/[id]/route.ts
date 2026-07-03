@@ -156,6 +156,7 @@ export async function PUT(
 ) {
   const { id } = await params
   const body = await req.json() as {
+    reassign?: boolean
     fullEdit?: boolean
     name?: string
     vendedorId?: string
@@ -183,6 +184,16 @@ export async function PUT(
       maxContacts: number | null
       maxContactsPeriod?: string
     }[]
+  }
+
+  // ── Reassign: troca o vendedor de qualquer campanha (qualquer status) ─────
+  if (body.reassign) {
+    const { vendedorId } = body
+    if (!vendedorId) return NextResponse.json({ error: "vendedorId é obrigatório" }, { status: 400 })
+    const vendedor = await prisma.vendedor.findUnique({ where: { id: vendedorId }, select: { id: true } })
+    if (!vendedor) return NextResponse.json({ error: "Vendedor não encontrado" }, { status: 404 })
+    await prisma.campaign.update({ where: { id }, data: { vendedorId } })
+    return NextResponse.json({ ok: true })
   }
 
   // ── Full edit (from edit page, DRAFT campaigns only) ───────────────────────

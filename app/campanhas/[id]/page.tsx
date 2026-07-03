@@ -12,7 +12,7 @@ export default async function CampaignDetailPage({
 }) {
   const { id } = await params
 
-  const [campaign, statusCounts, queueMessages, sentMessages, failedMessages, nextPendingMsg] = await Promise.all([
+  const [campaign, statusCounts, queueMessages, sentMessages, failedMessages, nextPendingMsg, vendedores] = await Promise.all([
     prisma.campaign.findUnique({
       where: { id },
       include: {
@@ -57,6 +57,11 @@ export default async function CampaignDetailPage({
       orderBy: { nextSendAt: "asc" },
       include: { contact: { select: { phone: true, name: true } } },
     }),
+    prisma.vendedor.findMany({
+      where: { ativo: true },
+      select: { id: true, nome: true, userId: true },
+      orderBy: { nome: "asc" },
+    }),
   ])
 
   if (!campaign) return notFound()
@@ -84,6 +89,7 @@ export default async function CampaignDetailPage({
   const serialized = {
     id: campaign.id,
     name: campaign.name,
+    vendedorId: campaign.vendedorId,
     status: campaign.status as
       | "DRAFT"
       | "SCHEDULED"
@@ -165,7 +171,7 @@ export default async function CampaignDetailPage({
 
   return (
     <div className="max-w-7xl mx-auto">
-      <CampaignDetail initial={serialized} />
+      <CampaignDetail initial={serialized} vendedores={vendedores} />
     </div>
   )
 }

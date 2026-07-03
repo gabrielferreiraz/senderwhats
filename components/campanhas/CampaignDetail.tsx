@@ -30,6 +30,8 @@ import {
   MessageCircle,
   PackageCheck,
   Eye,
+  ArrowLeftRight,
+  X,
 } from "lucide-react"
 import type { ScheduleEstimate } from "@/lib/campaign-estimate"
 
@@ -90,9 +92,12 @@ type ScheduleRule = {
   maxContactsPeriod: string
 }
 
+type Vendedor = { id: string; nome: string; userId: string }
+
 type CampaignData = {
   id: string
   name: string
+  vendedorId: string | null
   status: CampaignStatus
   scheduledAt: string | null
   minDelay: number
@@ -1261,7 +1266,13 @@ function RemarketingSection({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function CampaignDetail({ initial }: { initial: CampaignData }) {
+export function CampaignDetail({
+  initial,
+  vendedores = [],
+}: {
+  initial: CampaignData
+  vendedores?: Vendedor[]
+}) {
   const router = useRouter()
   const [data, setData] = useState<CampaignData>(initial)
   const [actioning, setActioning] = useState(false)
@@ -1271,6 +1282,9 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
   const [selectedTarget, setSelectedTarget] = useState<"pending" | "all" | "sent_only">("pending")
   const [skippedDuplicatesNotice, setSkippedDuplicatesNotice] = useState<number | null>(null)
   const [confirmRunningModal, setConfirmRunningModal] = useState(false)
+  const [showReassignModal, setShowReassignModal] = useState(false)
+  const [reassigning, setReassigning] = useState(false)
+  const [selectedVendedorId, setSelectedVendedorId] = useState<string>(initial.vendedorId ?? "")
 
   const handleDuplicate = async () => {
     setDuplicating(true)
@@ -1281,6 +1295,24 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
       router.push(`/campanhas/${newId}/editar`)
     } finally {
       setDuplicating(false)
+    }
+  }
+
+  const handleReassign = async () => {
+    if (!selectedVendedorId) return
+    setReassigning(true)
+    try {
+      const res = await fetch(`/api/campaigns/${initial.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reassign: true, vendedorId: selectedVendedorId }),
+      })
+      if (res.ok) {
+        setShowReassignModal(false)
+        await fetchData()
+      }
+    } finally {
+      setReassigning(false)
     }
   }
   const [lastRefresh, setLastRefresh] = useState(Date.now())
@@ -1785,12 +1817,20 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
                 ? `Instância "${data.vendedor?.nome}" está reconectando — envios pausados até reconectar`
                 : `Instância "${data.vendedor?.nome}" está desconectada — os envios estão falhando`}
             </span>
-            <a
-              href="/instancias"
-              className="ml-auto text-xs underline underline-offset-2 opacity-70 hover:opacity-100 shrink-0"
-            >
-              Reconectar →
-            </a>
+            <div className="ml-auto flex items-center gap-3 shrink-0">
+              <button
+                onClick={() => { setSelectedVendedorId(data.vendedorId ?? ""); setShowReassignModal(true) }}
+                className="text-xs underline underline-offset-2 opacity-70 hover:opacity-100 transition-opacity"
+              >
+                Trocar instância →
+              </button>
+              <a
+                href="/instancias"
+                className="text-xs underline underline-offset-2 opacity-70 hover:opacity-100"
+              >
+                Reconectar →
+              </a>
+            </div>
           </motion.div>
         )}
         {isRunning && data.scheduleRules.length > 0 && !data.estimate?.inWindow && data.estimate?.nextWindowStart && (
@@ -1817,10 +1857,15 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
             {data.template.name} · {data.template._count.steps} passo{data.template._count.steps !== 1 ? "s" : ""}
           </span>
         )}
-        <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
+        <button
+          onClick={() => { setSelectedVendedorId(data.vendedorId ?? ""); setShowReassignModal(true) }}
+          className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] hover:bg-violet-100 dark:hover:bg-violet-500/20 text-slate-500 dark:text-slate-400 hover:text-violet-600 dark:hover:text-violet-400 transition-colors group"
+          title="Trocar instância"
+        >
           <Smartphone className="w-3 h-3" />
-          {data.vendedor?.nome}
-        </span>
+          {data.vendedor?.nome ?? "Sem instância"}
+          <ArrowLeftRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity ml-0.5" />
+        </button>
         <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/[0.05] text-slate-500 dark:text-slate-400">
           <Clock className="w-3 h-3" />
           Delay: {fmtSec(data.minDelay)} – {fmtSec(data.maxDelay)}
@@ -2045,6 +2090,89 @@ export function CampaignDetail({ initial }: { initial: CampaignData }) {
           onPauseToggle={fetchData}
         />
       )}
+
+      {/* ── Reassign modal ───────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {showReassignModal && (
+          <motion.div
+            key="reassign-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowReassignModal(false) }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 8 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white dark:bg-[#151a28] border border-slate-200 dark:border-white/[0.08] rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            >
+              <div className="flex items-start justify-between mb-5">
+                <div>
+                  <p className="font-semibold text-slate-900 dark:text-white">Trocar Instância</p>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Selecione o consultor que vai assumir esta campanha
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowReassignModal(false)}
+                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/[0.06] transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="space-y-1.5 mb-6 max-h-64 overflow-y-auto">
+                {vendedores.length === 0 ? (
+                  <p className="text-xs text-slate-500 text-center py-6">
+                    Nenhuma instância ativa cadastrada
+                  </p>
+                ) : vendedores.map((v) => (
+                  <button
+                    key={v.id}
+                    onClick={() => setSelectedVendedorId(v.id)}
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left transition-colors border ${
+                      selectedVendedorId === v.id
+                        ? "bg-violet-50 dark:bg-violet-500/10 border-violet-200 dark:border-violet-500/30"
+                        : "border-transparent hover:bg-slate-50 dark:hover:bg-white/[0.04]"
+                    }`}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center text-white text-xs font-bold shrink-0 select-none">
+                      {v.nome.slice(0, 2).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{v.nome}</p>
+                      <p className="text-[11px] text-slate-400 font-mono">{v.userId}</p>
+                    </div>
+                    {selectedVendedorId === v.id && (
+                      <CheckCircle2 className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowReassignModal(false)}
+                  className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/[0.08] text-sm font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-white/[0.04] transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleReassign}
+                  disabled={reassigning || !selectedVendedorId || selectedVendedorId === (data.vendedorId ?? "")}
+                  className="flex-1 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {reassigning && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  Confirmar
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }
