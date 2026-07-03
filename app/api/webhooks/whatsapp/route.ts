@@ -8,6 +8,9 @@ function normalizePhone(raw: string): string {
   let clean = raw.replace(/\D/g, "")
   clean = clean.replace(/^0+/, "")
   if (clean.length < 8) return clean
+  // IDs internos do WhatsApp/Baileys (ex: JIDs Business) podem ter 15+ dígitos;
+  // não tentar normalizar como número BR — devolver como está
+  if (clean.length > 14) return clean
   if (clean.startsWith("55") && clean.length >= 12) clean = clean.slice(2)
   if (clean.length === 8 || clean.length === 9) {
     if (clean.length === 8 && ["6", "7", "8", "9"].includes(clean[0] ?? "")) clean = "9" + clean

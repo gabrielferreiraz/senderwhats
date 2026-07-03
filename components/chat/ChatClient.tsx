@@ -16,6 +16,7 @@ import {
   ChevronDown,
   ArrowLeft,
   X,
+  SendHorizonal,
 } from "lucide-react"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -97,6 +98,8 @@ function fmtPhone(raw: string): string {
     return `+55 (${d.slice(2, 4)}) ${d.slice(4, 5)} ${d.slice(5, 9)}-${d.slice(9)}`
   if (d.length === 12 && d.startsWith("55"))
     return `+55 (${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`
+  // JID ou ID interno do WhatsApp — trunca para não poluir a UI
+  if (d.length > 13) return `+${d.slice(0, 4)}…${d.slice(-4)}`
   return `+${d}`
 }
 
@@ -134,6 +137,7 @@ function msgMeta(msgs: Message[], i: number) {
 
 function AckIcon({ n, dim = false }: { n: number; dim?: boolean }) {
   const base = dim ? "opacity-70" : ""
+  if (n === -1) return <X className={`w-[11px] h-[11px] text-red-400`} />
   if (n === 0) return <Clock    className={`w-[11px] h-[11px] ${base} text-current`} />
   if (n === 1) return <Check    className={`w-[11px] h-[11px] ${base} text-current`} />
   if (n === 2) return <CheckCheck className={`w-[11px] h-[11px] ${base} text-current`} />
@@ -171,10 +175,13 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
   const [contactName,    setContactName]    = useState<string | null>(null)
   const [search,         setSearch]         = useState("")
   const [mobileChat,     setMobileChat]     = useState(false)
+  const [inputText,      setInputText]      = useState("")
+  const [sending,        setSending]        = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const pollConvRef  = useRef<ReturnType<typeof setInterval> | null>(null)
   const pollMsgRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const inputRef     = useRef<HTMLTextAreaElement>(null)
 
   const fetchConversations = useCallback(async (userId: string) => {
     if (!userId) return
@@ -231,6 +238,41 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
       (c) => c.contactPhone.includes(q) || (c.contactName ?? "").toLowerCase().includes(q)
     )
   }, [conversations, search])
+
+  const handleSend = useCallback(async () => {
+    if (!inputText.trim() || !selectedPhone || sending) return
+    const text = inputText.trim()
+    setInputText("")
+    setSending(true)
+    // Optimistic: add message immediately
+    const optimistic: Message = {
+      id: `opt-${Date.now()}`,
+      direction: "out",
+      body: text,
+      mediaType: "text",
+      whatsappMsgId: null,
+      ackStatus: 0,
+      timestamp: new Date().toISOString(),
+    }
+    setMessages((prev) => [...prev, optimistic])
+    try {
+      const res = await fetch(
+        `/api/chat/${selectedUserId}/${encodeURIComponent(selectedPhone)}`,
+        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) }
+      )
+      if (res.ok) {
+        const saved = await res.json() as Message
+        // Replace optimistic entry with the real one from DB
+        setMessages((prev) => prev.map((m) => m.id === optimistic.id ? saved : m))
+      }
+    } catch {
+      // On error, keep the message but mark ackStatus as -1 (error indicator)
+      setMessages((prev) => prev.map((m) => m.id === optimistic.id ? { ...m, ackStatus: -1 } : m))
+    } finally {
+      setSending(false)
+      inputRef.current?.focus()
+    }
+  }, [inputText, selectedPhone, selectedUserId, sending])
 
   const selectedVendedor = vendedores.find((v) => v.userId === selectedUserId)
 
@@ -467,7 +509,7 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
             </header>
 
             {/* ── Messages area ────────────────────────── */}
-            <div className="flex-1 overflow-y-auto px-4 py-5">
+            <div className="flex-1 overflow-y-auto px-4 py-5 overflow-anchor-none">
               {messages.length === 0 && !loadingMsgs ? (
                 <div className="flex justify-center pt-12">
                   <span className="text-[12px] text-slate-400 dark:text-slate-600 bg-white dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.06] px-4 py-1.5 rounded-full">
@@ -548,6 +590,39 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
                   <div ref={bottomRef} />
                 </>
               )}
+            </div>
+
+            {/* ── Input bar ────────────────────────────── */}
+            <div className="px-4 py-3 bg-white dark:bg-[#0d1120] border-t border-slate-200 dark:border-white/[0.06] shrink-0">
+              <div className="flex items-end gap-2">
+                <textarea
+                  ref={inputRef}
+                  value={inputText}
+                  onChange={(e) => {
+                    setInputText(e.target.value)
+                    e.target.style.height = "auto"
+                    e.target.style.height = Math.min(e.target.scrollHeight, 140) + "px"
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault()
+                      void handleSend()
+                    }
+                  }}
+                  placeholder="Digite uma mensagem…"
+                  rows={1}
+                  className="flex-1 resize-none bg-slate-100 dark:bg-white/[0.06] rounded-2xl text-[13.5px] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600 px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition-all leading-snug max-h-[140px] overflow-y-auto"
+                />
+                <button
+                  onClick={() => void handleSend()}
+                  disabled={!inputText.trim() || sending}
+                  className="w-10 h-10 shrink-0 rounded-full bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+                >
+                  {sending
+                    ? <Spinner sm />
+                    : <SendHorizonal className="w-4 h-4 text-white" />}
+                </button>
+              </div>
             </div>
           </>
         )}
