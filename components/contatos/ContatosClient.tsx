@@ -51,7 +51,7 @@ type Contact = {
   journey: string
 }
 
-type Vendedor = { id: string; nome: string }
+type Vendedor = { id: string; nome: string; userId: string }
 
 type Props = {
   initialLists: ContactList[]
@@ -1215,6 +1215,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             onNameChange={(id, name) =>
               setContacts((prev) => prev.map((c) => (c.id === id ? { ...c, name } : c)))
             }
+            vendedores={vendedores}
           />
         )}
       </AnimatePresence>

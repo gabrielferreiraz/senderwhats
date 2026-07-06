@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { motion } from "framer-motion"
+import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
 import {
   X,
   Phone,
@@ -13,6 +14,8 @@ import {
   Clock,
   Edit2,
   Check,
+  MessageCircle,
+  ChevronDown,
 } from "lucide-react"
 
 type ContactDetail = {
@@ -45,21 +48,28 @@ const STATUS_MAP: Record<string, { label: string; icon: React.ReactNode; cls: st
   SKIPPED:   { label: "Pulado",    icon: null,                                 cls: "text-slate-400" },
 }
 
+type Vendedor = { id: string; nome: string; userId: string }
+
 export function ContactDrawer({
   contactId,
   onClose,
   onNameChange,
+  vendedores = [],
 }: {
   contactId: string
   onClose: () => void
   onNameChange?: (id: string, name: string) => void
+  vendedores?: Vendedor[]
 }) {
+  const router = useRouter()
   const [contact, setContact] = useState<ContactDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [editingName, setEditingName] = useState(false)
   const [nameInput, setNameInput] = useState("")
   const [savingName, setSavingName] = useState(false)
   const nameRef = useRef<HTMLInputElement>(null)
+  const [showChatPicker, setShowChatPicker] = useState(false)
+  const [chatUserId, setChatUserId] = useState(vendedores[0]?.userId ?? "")
 
   useEffect(() => {
     setLoading(true)
@@ -229,6 +239,64 @@ export function ContactDrawer({
                 </div>
               )}
             </div>
+
+            {/* Iniciar conversa */}
+            {vendedores.length > 0 && contact && (
+              <div className="px-5 py-4 border-b border-slate-100 dark:border-white/[0.04]">
+                <button
+                  onClick={() => setShowChatPicker((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-[13px] font-semibold transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <MessageCircle className="w-4 h-4" />
+                    Iniciar conversa
+                  </span>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showChatPicker ? "rotate-180" : ""}`} />
+                </button>
+
+                <AnimatePresence>
+                  {showChatPicker && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-3 space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                          Selecione a instância (vendedor)
+                        </p>
+                        <div className="relative">
+                          <select
+                            value={chatUserId}
+                            onChange={(e) => setChatUserId(e.target.value)}
+                            className="w-full appearance-none bg-slate-50 dark:bg-white/[0.04] border border-slate-200 dark:border-white/[0.08] rounded-xl text-[13px] text-slate-900 dark:text-white pl-3 pr-8 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-500/30 transition-all"
+                          >
+                            {vendedores.map((v) => (
+                              <option key={v.userId} value={v.userId}>
+                                {v.nome}
+                              </option>
+                            ))}
+                          </select>
+                          <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                        </div>
+                        <button
+                          disabled={!chatUserId}
+                          onClick={() => {
+                            router.push(`/chat?phone=${encodeURIComponent(contact.phone)}&userId=${encodeURIComponent(chatUserId)}`)
+                            onClose()
+                          }}
+                          className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-[13px] font-semibold transition-colors"
+                        >
+                          Abrir chat
+                        </button>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
 
             {/* Variables */}
             {vars.length > 0 && (

@@ -167,16 +167,28 @@ function Spinner({ sm }: { sm?: boolean }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
-  const [selectedUserId, setSelectedUserId] = useState(vendedores[0]?.userId ?? "")
+export function ChatClient({
+  vendedores,
+  initialPhone,
+  initialUserId,
+}: {
+  vendedores: Vendedor[]
+  initialPhone?: string
+  initialUserId?: string
+}) {
+  const [selectedUserId, setSelectedUserId] = useState(
+    initialUserId && vendedores.some((v) => v.userId === initialUserId)
+      ? initialUserId
+      : (vendedores[0]?.userId ?? "")
+  )
   const [conversations,  setConversations]  = useState<Conversation[]>([])
   const [loadingConvs,   setLoadingConvs]   = useState(false)
-  const [selectedPhone,  setSelectedPhone]  = useState<string | null>(null)
+  const [selectedPhone,  setSelectedPhone]  = useState<string | null>(initialPhone ?? null)
   const [messages,       setMessages]       = useState<Message[]>([])
   const [loadingMsgs,    setLoadingMsgs]    = useState(false)
   const [contactName,    setContactName]    = useState<string | null>(null)
   const [search,         setSearch]         = useState("")
-  const [mobileChat,     setMobileChat]     = useState(false)
+  const [mobileChat,     setMobileChat]     = useState(!!initialPhone)
   const [inputText,      setInputText]      = useState("")
   const [sending,        setSending]        = useState(false)
   const [sendError,      setSendError]      = useState<string | null>(null)
@@ -212,13 +224,17 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
   }, [])
 
   useEffect(() => {
-    setSelectedPhone(null)
-    setMessages([])
-    setMobileChat(false)
+    // Ao trocar de vendedor só reseta o phone se não veio de um link direto
+    if (!initialPhone) {
+      setSelectedPhone(null)
+      setMessages([])
+      setMobileChat(false)
+    }
     fetchConversations(selectedUserId)
     clearInterval(pollConvRef.current!)
     pollConvRef.current = setInterval(() => fetchConversations(selectedUserId), 3000)
     return () => clearInterval(pollConvRef.current!)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUserId, fetchConversations])
 
   useEffect(() => {

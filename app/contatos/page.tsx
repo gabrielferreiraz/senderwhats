@@ -12,7 +12,7 @@ export default async function ContatosPage() {
         vendedor: { select: { nome: true, userId: true } },
       },
     }),
-    prisma.vendedor.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    prisma.vendedor.findMany({ orderBy: { nome: "asc" }, select: { id: true, nome: true, userId: true } }),
   ])
 
   const serialized = lists.map((l) => ({
