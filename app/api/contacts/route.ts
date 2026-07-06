@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { buildContactWhere } from "@/lib/contacts/buildContactWhere"
+import { normalizePhone } from "@/lib/phone"
 
 export const dynamic = "force-dynamic"
 
@@ -114,5 +115,93 @@ export async function GET(req: NextRequest) {
   } catch (err) {
     console.error("[GET /api/contacts]", err)
     return NextResponse.json({ error: "Erro interno ao buscar contatos" }, { status: 500 })
+  }
+}
+
+// POST /api/contacts — adiciona um contato individual com detecção de duplicata
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json() as { phone?: string; name?: string; listId?: string }
+    const rawPhone = String(body.phone ?? "").trim()
+    if (!rawPhone) return NextResponse.json({ error: "Telefone é obrigatório" }, { status: 400 })
+
+    const phone = normalizePhone(rawPhone)
+    if (phone.length < 12) return NextResponse.json({ error: "Número de telefone inválido" }, { status: 400 })
+
+    // Verifica se já existe
+    const existing = await prisma.contact.findUnique({
+      where: { phone },
+      select: {
+        id: true,
+        phone: true,
+        name: true,
+        createdAt: true,
+        lastContactedAt: true,
+        listItems: {
+          select: {
+            list: {
+              select: {
+                id: true,
+                name: true,
+                vendedor: { select: { nome: true } },
+              },
+            },
+          },
+        },
+        messages: {
+          orderBy: { sentAt: "desc" },
+          take: 5,
+          select: {
+            status: true,
+            sentAt: true,
+            campaign: {
+              select: {
+                name: true,
+                status: true,
+                vendedor: { select: { nome: true } },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (existing) {
+      return NextResponse.json({
+        exists: true,
+        contact: {
+          ...existing,
+          createdAt: existing.createdAt.toISOString(),
+          lastContactedAt: existing.lastContactedAt?.toISOString() ?? null,
+          messages: existing.messages.map((m) => ({
+            ...m,
+            sentAt: m.sentAt?.toISOString() ?? null,
+          })),
+        },
+      }, { status: 409 })
+    }
+
+    // Cria o contato
+    const contact = await prisma.contact.create({
+      data: {
+        phone,
+        name: body.name?.trim() || null,
+      },
+    })
+
+    // Adiciona à lista se informada
+    if (body.listId) {
+      const list = await prisma.contactList.findUnique({ where: { id: body.listId } })
+      if (list) {
+        await prisma.contactListItem.create({
+          data: { contactId: contact.id, listId: body.listId },
+        }).catch(() => {}) // ignora se já estiver na lista
+      }
+    }
+
+    return NextResponse.json({ exists: false, contact: { ...contact, createdAt: contact.createdAt.toISOString() } }, { status: 201 })
+  } catch (err) {
+    console.error("[POST /api/contacts]", err)
+    return NextResponse.json({ error: "Erro interno ao criar contato" }, { status: 500 })
   }
 }

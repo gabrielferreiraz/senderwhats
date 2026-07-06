@@ -113,7 +113,7 @@ function previewBody(body: string, mediaType: string) {
   if (mediaType === "video")    return body ? `🎥 ${body}` : "🎥 Vídeo"
   if (mediaType === "document") return body ? `📄 ${body}` : "📄 Documento"
   if (mediaType === "sticker" || mediaType === "media") return "🖼️ Mídia"
-  return body.length > 44 ? body.slice(0, 44) + "…" : body
+  return body
 }
 
 // ─── Message grouping ─────────────────────────────────────────────────────────
@@ -135,13 +135,15 @@ function msgMeta(msgs: Message[], i: number) {
 
 // ─── ACK ─────────────────────────────────────────────────────────────────────
 
+// dim=true → dentro da bolha (cores claras sobre fundo roxo)
+// dim=false → na lista de conversas (cores sobre fundo branco/escuro)
 function AckIcon({ n, dim = false }: { n: number; dim?: boolean }) {
-  const base = dim ? "opacity-70" : ""
-  if (n === -1) return <X className={`w-[11px] h-[11px] text-red-400`} />
-  if (n === 0) return <Clock    className={`w-[11px] h-[11px] ${base} text-current`} />
-  if (n === 1) return <Check    className={`w-[11px] h-[11px] ${base} text-current`} />
-  if (n === 2) return <CheckCheck className={`w-[11px] h-[11px] ${base} text-current`} />
-  return <CheckCheck className={`w-[11px] h-[11px] ${dim ? "text-sky-300" : "text-violet-400"}`} />
+  if (n === -1) return <X className="w-3 h-3 text-red-400" />
+  if (n === 0)  return <Clock      className={`w-3 h-3 ${dim ? "text-violet-200/70" : "text-slate-400"}`} />
+  if (n === 1)  return <Check      className={`w-3 h-3 ${dim ? "text-violet-200/80" : "text-slate-400"}`} />
+  if (n === 2)  return <CheckCheck className={`w-3 h-3 ${dim ? "text-violet-200/80" : "text-slate-400"}`} />
+  // n >= 3 → lido (azul — igual ao WhatsApp)
+  return <CheckCheck className={`w-3 h-3 ${dim ? "text-sky-300" : "text-sky-500"}`} />
 }
 
 // ─── Media badge ──────────────────────────────────────────────────────────────
@@ -419,13 +421,13 @@ export function ChatClient({ vendedores }: { vendedores: Vendedor[] }) {
                         {fmtTime(c.timestamp)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-start gap-1 mt-0.5">
                       {c.direction === "out" && (
-                        <span className="shrink-0 text-slate-400">
+                        <span className="shrink-0 mt-[1px] text-slate-400">
                           <AckIcon n={c.ackStatus} />
                         </span>
                       )}
-                      <span className="text-[11px] text-slate-500 dark:text-slate-500 truncate leading-tight">
+                      <span className="text-[12px] text-slate-500 dark:text-slate-400 leading-[1.35] line-clamp-2 break-words">
                         {previewBody(c.body, c.mediaType)}
                       </span>
                     </div>

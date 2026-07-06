@@ -22,8 +22,10 @@ import {
   ChevronsUpDown,
   ListPlus,
   ListMinus,
+  UserPlus,
 } from "lucide-react"
 import { ImportCSVModal } from "./ImportCSVModal"
+import { AddContactModal } from "./AddContactModal"
 import { NewListModal } from "./NewListModal"
 import { DeleteListModal } from "./DeleteListModal"
 import { ContactDrawer } from "./ContactDrawer"
@@ -269,6 +271,7 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
   // Tracks programmatic page resets (search/filter change) to avoid double-fetch
   const isResettingPageRef = useRef(false)
   const [showImport, setShowImport] = useState(false)
+  const [showAddContact, setShowAddContact] = useState(false)
   const [showNewList, setShowNewList] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; count: number } | null>(null)
   const [deletingList, setDeletingList] = useState(false)
@@ -696,6 +699,14 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
             >
               <Download className="w-4 h-4" />
               Exportar
+            </motion.button>
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setShowAddContact(true)}
+              className="flex items-center gap-2 text-sm font-semibold px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition-colors whitespace-nowrap"
+            >
+              <UserPlus className="w-4 h-4" />
+              Novo Contato
             </motion.button>
             <motion.button
               whileTap={{ scale: 0.97 }}
@@ -1145,6 +1156,15 @@ export function ContatosClient({ initialLists, vendedores }: Props) {
       </div>
 
       {/* Modals */}
+      {showAddContact && (
+        <AddContactModal
+          lists={lists.map((l) => ({ id: l.id, name: l.name }))}
+          onClose={() => setShowAddContact(false)}
+          onCreated={() => {
+            fetchContacts(1, search, selectedListId, selectedVendedorId, selectedJourney, createdAfter, createdBefore, sortBy, sortDir)
+          }}
+        />
+      )}
       <AnimatePresence>
         {showImport && (
           <ImportCSVModal
